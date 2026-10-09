@@ -49,6 +49,14 @@ all and exits, **F4** opens Find, and **Escape** exits (after dismissing active
 dialogs or Find). Ctrl+S saves, Ctrl+W closes a tab without caching, Ctrl+N creates
 a draft, Ctrl+O opens a file, and Ctrl+PageUp/PageDown switches tabs.
 
+Left-click a tab name to select it or its right-side **⨯** to close that document
+without caching (with discard confirmation when enabled). Closing an inactive tab
+keeps your current document selected. The close control falls back to **X** when
+encoding or terminal cell-width compatibility requires it.
+Tab prefixes **⏺** (modified) and **▲** (unresolved recovery conflict) can appear
+together. Draft titles are orange by default; conflict titles are red. Inactive
+state-colored titles are dimmed, and successful first saves remove draft coloring.
+
 By default, autosave is disabled, exit caches unsaved work, and uncached discard
 requires confirmation. Enable recovery for one launch with `--recover`, or set
 `auto_restore: true` to restore at every editing startup. `--no-cache` suppresses
@@ -80,6 +88,25 @@ auto_save: 0
 cache: true
 prompt: true
 auto_restore: false
+focus_color: "#0178D4"
+draft_color: "#FFA62B"
+conflict_color: "#E06C75"
+```
+
+Colors use quoted `"#RRGGBB"` strings. `focus_color` controls editor/input focus
+borders, button focus indicators, and the tab highlight. `draft_color: null` or
+`conflict_color: null` disables that state's text-color override without hiding
+icons. Enabled conflict coloring takes precedence over enabled draft coloring,
+then normal tab coloring applies. Both named and unnamed never-saved drafts use
+draft coloring. `focus_color` cannot be null.
+
+Constructor overrides accept Python `None` for state colors. Instance-only
+changes apply immediately in a running standalone UI without rewriting user YAML:
+
+```python
+editor = Edital(conflict_color=None)
+editor.conf.set("focus_color", "#88C0D0")
+editor.conf.set("draft_color", None)
 ```
 
 Linux uses `$XDG_CONFIG_HOME/edital/conf.yml` and

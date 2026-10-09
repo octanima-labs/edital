@@ -169,7 +169,7 @@ def test_open_labels_and_save_all_cancel(tmp_path):
             assert len(editor.files) == 2
             for document in editor.files:
                 tab = app.query_one(Tabs).get_tab(f"tab-{document.id}")
-                assert tab.label.plain == str(document.path)
+                assert tab.label.plain == f"{document.path}  ⨯"
             await pilot.press("ctrl+n", "x", "f3")
             assert isinstance(app.screen, PathDialog)
             await pilot.press("escape")

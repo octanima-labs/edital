@@ -1,5 +1,7 @@
 """Validate configuration precedence and platform storage conventions."""
 
+import subprocess
+import sys
 from importlib.resources import files
 
 import pytest
@@ -71,3 +73,49 @@ def test_auto_restore_precedence_and_instance_update(isolated_storage):
     conf.set("auto_restore", True)
     assert conf.get("auto_restore") is True
     assert path.read_text() == "auto_restore: true\n"
+
+
+def test_color_defaults_precedence_and_live_notifications(isolated_storage):
+    path, _ = isolated_storage
+    EditalConf()
+    path.write_text('conflict_color: "#abcdef"\ndraft_color: null\n')
+    conf = EditalConf(conflict_color=None)
+    assert conf.get("focus_color") == "#0178D4"
+    assert conf.get("draft_color") is None
+    assert conf.get("conflict_color") is None
+    notified = []
+    unsubscribe = conf.subscribe(notified.append)
+    conf.set("draft_color", "#aBcD01")
+    conf.set("focus_color", "#123456")
+    conf.set("conflict_color", None)
+    assert notified == ["draft_color", "focus_color", "conflict_color"]
+    assert conf.get("draft_color") == "#aBcD01"
+    unsubscribe()
+    assert path.read_text() == 'conflict_color: "#abcdef"\ndraft_color: null\n'
+
+
+@pytest.mark.parametrize("key", ["focus_color", "draft_color", "conflict_color"])
+@pytest.mark.parametrize("value", [True, 123, [], "red", "#123", "#12345g", "#1234567"])
+def test_invalid_colors(isolated_storage, key, value):
+    conf = EditalConf()
+    previous = conf.get(key)
+    with pytest.raises(ValueError, match=key + " must be.*#RRGGBB"):
+        conf.set(key, value)
+    assert conf.get(key) == previous
+
+
+def test_focus_color_cannot_be_null(isolated_storage):
+    with pytest.raises(ValueError, match="focus_color"):
+        EditalConf(focus_color=None)
+
+
+def test_color_configuration_does_not_import_textual(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    result = subprocess.run(
+        [sys.executable, "-c", ("from edital import Edital; import sys; "
+         "editor = Edital(focus_color='#123456', draft_color=None, conflict_color=None); "
+         "assert editor.conf.get('draft_color') is None; assert 'textual' not in sys.modules")],
+        check=False, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr

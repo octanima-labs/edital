@@ -6,3 +6,9 @@ cache: true
 prompt: true
 # Restore recovery snapshots at editing startup; --recover enables this per launch.
 auto_restore: false
+# Focus indicators throughout the standalone UI; quote hexadecimal colors.
+focus_color: "#0178D4"
+# Draft tab text; null disables draft-specific coloring.
+draft_color: "#FFA62B"
+# Unresolved-conflict tab text; null disables coloring but retains the icon.
+conflict_color: "#E06C75"

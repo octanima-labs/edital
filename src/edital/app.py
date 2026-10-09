@@ -2,23 +2,61 @@
 
 from typing import ClassVar
 
+from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
-from textual.containers import Vertical
+from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Footer, Input, Static, TextArea
 
 from .session import EditResult, Validator, line_ending
 
 
+class DialogActions(Horizontal):
+    """Content-sized, one-line actions with a narrow-width vertical fallback."""
+
+    DEFAULT_CSS = """
+    DialogActions {
+        height: auto; margin-top: 1; align-horizontal: right;
+        Button {
+            width: auto; min-width: 0; max-width: 100%; margin-left: 1;
+            border-left: blank transparent !important;
+            border-right: blank transparent !important;
+        }
+        Button:focus {
+            border-left: solid $border !important;
+            border-right: solid $border !important;
+        }
+        &.-stacked {
+            layout: vertical;
+            Button { margin: 0 0 1 0; }
+        }
+    }
+    """
+
+    def on_resize(self, event: events.Resize) -> None:
+        required = sum(button.get_content_width(event.size, self.screen.size)
+                       + button.styles.gutter.width + 1 for button in self.query(Button))
+        self.set_class(required > event.size.width, "-stacked")
+
+
 class DiscardDialog(ModalScreen[bool]):
     """Ask whether to abandon a modified buffer."""
+
+    DEFAULT_CSS = """
+    DiscardDialog { align: center middle; background: $background 70%; }
+    #discard-dialog {
+        width: 40; max-width: 100%; height: auto; max-height: 100%;
+        overflow-y: auto; padding: 1 2; border: thick $primary;
+    }
+    """
 
     def compose(self) -> ComposeResult:
         with Vertical(id="discard-dialog"):
             yield Static("Discard your changes?")
-            yield Button("Keep editing", id="keep", variant="primary")
-            yield Button("Discard", id="discard", variant="error")
+            with DialogActions():
+                yield Button("Keep editing", id="keep", variant="primary", compact=True)
+                yield Button("Discard", id="discard", variant="error", compact=True)
 
     def on_mount(self) -> None:
         self.query_one("#keep", Button).focus()
@@ -35,9 +73,6 @@ class EditorApp(App[EditResult]):
     TextArea { height: 1fr; }
     #diagnostic { height: auto; max-height: 8; padding: 0 1; color: $error; }
     #find { height: 3; }
-    DiscardDialog { align: center middle; background: $background 70%; }
-    #discard-dialog { width: 40; height: auto; padding: 1 2; border: thick $primary; }
-    #discard-dialog Button { width: 100%; margin-top: 1; }
     """
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("f2", "accept", "Save & close", priority=True),

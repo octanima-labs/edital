@@ -88,6 +88,9 @@ auto_save: 0
 cache: true
 prompt: true
 auto_restore: false
+focus_color: "#0178D4"
+draft_color: "#FFA62B"
+conflict_color: "#E06C75"
 ```
 
 The first standalone use creates a missing configuration from packaged defaults
@@ -108,6 +111,43 @@ still named `conf.yml`.
 
 Paths use native user-directory resolution without author/version prefixes.
 Inspect `editor.conf.path` and `editor.cache_dir` for actual locations.
+
+### Interface colors
+
+Color settings accept hexadecimal `#RRGGBB` strings (hex letter case does not
+matter). Quote them in YAML: an unquoted `#` starts a comment.
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| `focus_color` | `"#0178D4"` (blue) | Focused editor/input borders, button focus indicators, and tab highlight |
+| `draft_color` | `"#FFA62B"` (orange) | Text of named and unnamed never-loaded/saved drafts |
+| `conflict_color` | `"#E06C75"` (red) | Text of tabs with unresolved recovery conflicts |
+
+State-colored titles use full color when selected and a dimmed version when
+inactive. A successfully saved draft returns to normal coloring; modifying an
+already-saved file does not make it a draft. Enabled conflict coloring takes
+precedence over enabled draft coloring, then normal theme coloring applies.
+Focus indicators remain separate from title state colors and destructive actions.
+
+Set `draft_color: null` or `conflict_color: null` to disable that state's color
+override. Icons remain visible. A conflicted draft with `conflict_color: null`
+still uses draft coloring when enabled; with both null, it uses normal coloring.
+`focus_color` requires a color and cannot be null. Invalid formats/types report
+the offending setting. Existing configuration files inherit omitted color defaults
+without being rewritten.
+
+Python constructor overrides and `conf.set` use `None` for null state colors:
+
+```python
+editor = Edital(focus_color="#88C0D0", draft_color=None, conflict_color="#FF5566")
+editor.conf.set("draft_color", "#FFA62B")
+editor.conf.set("conflict_color", None)
+```
+
+Valid instance color changes refresh a running standalone UI, including open
+prompts, immediately without changing user YAML. Saved disk configuration still
+requires a restart. Embedded transactional sessions retain theme focus styling
+and do not load standalone color settings.
 
 ### Periodic autosave
 
@@ -160,9 +200,22 @@ resolved; choosing recovered text changes memory only. Headless callers inspect
 | Ctrl+PageDown / Ctrl+PageUp | Next / previous tab |
 | Escape | Dismiss active interaction; otherwise exit using configured caching |
 
-Tabs preserve text, cursor, selection, and undo history. Dirty tabs show `*`, and
-unresolved recovery conflicts show `!`. Unnamed labels are `draft`, `draft (1)`,
-etc., without renumbering after a close. Same-named files show disambiguated paths.
+Tabs preserve text, cursor, selection, and undo history. Dirty tabs show **⏺**
+before the name, and unresolved recovery conflicts independently show **▲**;
+both states appear as `▲ ⏺ name`. Undoing back to the saved baseline removes only
+the dirty marker. Resolving a conflict removes its icon and conflict coloring.
+Unnamed labels are `draft`, `draft (1)`, etc., without renumbering after a close.
+Same-named files show disambiguated paths.
+
+Left-click a tab name to select it. Left-click its right-side **⨯** to close that
+document without caching, following the same confirmation rules as Ctrl+W.
+Closing an inactive tab, or declining its confirmation, preserves the current
+selection. Closing the final tab leaves an empty workspace. The cross falls back
+to **X** for output-encoding or cell-width incompatibility; terminal font glyph
+coverage cannot be detected reliably.
+
+Confirmation and path prompts use compact, content-sized single-line buttons
+side by side when space permits, with a vertical fallback on narrow terminals.
 
 ## Edit text transactionally
 

@@ -7,20 +7,27 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import Vertical
-from textual.content import Content
 from textual.screen import ModalScreen
 from textual.timer import Timer
-from textual.widgets import Button, Footer, Input, Static, Tab, Tabs, TextArea
+from textual.widgets import Button, Footer, Input, Static, Tabs, TextArea
 
-from .app import DiscardDialog
+from .app import DialogActions, DiscardDialog
 from .documents import SessionFile
 from .editor import ConfirmationRequired, Edital
+from .tabs import DocumentTab
 
 
 class PathDialog(ModalScreen[str | None]):
     """Collect a destination/open path without changing document state."""
 
     BINDINGS: ClassVar[list[BindingType]] = [("escape", "cancel", "Cancel")]
+
+    DEFAULT_CSS = """
+    #path-dialog {
+        width: 55; max-width: 100%; height: auto; max-height: 100%;
+        overflow-y: auto; padding: 1 2; border: thick $primary;
+    }
+    """
 
     def __init__(self, title: str) -> None:
         super().__init__()
@@ -30,8 +37,9 @@ class PathDialog(ModalScreen[str | None]):
         with Vertical(id="path-dialog"):
             yield Static(self.dialog_title, markup=False)
             yield Input(placeholder="File path", id="path")
-            yield Button("Continue", id="continue", variant="primary")
-            yield Button("Cancel", id="cancel")
+            with DialogActions():
+                yield Button("Continue", id="continue", variant="primary", compact=True)
+                yield Button("Cancel", id="cancel", compact=True)
 
     def on_mount(self) -> None:
         self.query_one(Input).focus()
@@ -88,11 +96,25 @@ class FileEditorApp(App[None]):
     #empty { padding: 2; }
     #diagnostic { height: auto; max-height: 5; color: $error; padding: 0 1; }
     #find { height: 3; }
-    ModalScreen { align: center middle; background: $background 70%; }
-    #path-dialog, #recovery-dialog, #discard-dialog {
-        width: 65; height: auto; padding: 1 2; border: thick $primary;
+    TextArea:focus, Input:focus { border: tall $edital-focus; }
+    Button:focus { border: tall $edital-focus; }
+    DialogActions Button.-textual-compact:focus {
+        border-top: none !important;
+        border-bottom: none !important;
+        border-left: solid $edital-focus !important;
+        border-right: solid $edital-focus !important;
     }
-    ModalScreen Button { width: 100%; margin-top: 1; }
+    Tabs .underline--bar { color: $edital-focus; }
+    Tabs:focus Tab.-active { color: $foreground; background: transparent; }
+    Tab.state-draft, Tab.state-draft:hover { color: $edital-draft 50%; }
+    Tab.state-conflict, Tab.state-conflict:hover { color: $edital-conflict 50%; }
+    Tab.state-draft.-active, Tabs:focus Tab.state-draft.-active { color: $edital-draft; }
+    Tab.state-conflict.-active, Tabs:focus Tab.state-conflict.-active { color: $edital-conflict; }
+    ModalScreen { align: center middle; background: $background 70%; }
+    #recovery-dialog {
+        width: 65; max-width: 100%; height: auto; padding: 1 2; border: thick $primary;
+    }
+    #recovery-dialog Button { width: 100%; margin-top: 1; }
     """
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("ctrl+n", "new", "New", priority=True),
@@ -108,12 +130,21 @@ class FileEditorApp(App[None]):
     ]
 
     def __init__(self, editor: Edital) -> None:
-        super().__init__()
         self.editor = editor
+        super().__init__()
         self.areas: dict[str, TextArea] = {}
         self._timer: Timer | None = None
         self._unsubscribe: Callable[[], None] | None = None
         self._reconciling = False
+
+    def get_css_variables(self) -> dict[str, str]:
+        variables = super().get_css_variables()
+        variables.update({
+            "edital-focus": self.editor.conf.get("focus_color"),
+            "edital-draft": self.editor.conf.get("draft_color") or variables["foreground"],
+            "edital-conflict": self.editor.conf.get("conflict_color") or variables["foreground"],
+        })
+        return variables
 
     def compose(self) -> ComposeResult:
         yield Tabs(id="tabs")
@@ -140,6 +171,9 @@ class FileEditorApp(App[None]):
     def _configuration_changed(self, key: str) -> None:
         if key == "auto_save":
             self._schedule_timer()
+        elif key in ("focus_color", "draft_color", "conflict_color"):
+            self.refresh_css(animate=False)
+            self.update_labels()
 
     def _schedule_timer(self) -> None:
         if self._timer is not None:
@@ -171,16 +205,21 @@ class FileEditorApp(App[None]):
             duplicate = any(d is not document and d.path is not None and d.path.name == document.path.name
                             for d in self.editor.files)
             name = str(document.path) if duplicate else document.path.name
-        return name + (" !" if document.conflict else " *" if document.modified else "")
+        markers = (["▲"] if document.conflict else []) + (["⏺"] if document.modified else [])
+        return " ".join([*markers, name])
 
     def update_labels(self) -> None:
         tabs = self.screen_stack[0].query_one("#tabs", Tabs)
         for document in self.editor.files:
             if document.id in self.areas:
                 tab = tabs.get_tab(f"tab-{document.id}")
-                label = self.label(document)
-                if tab is not None and tab.label.plain != label:
-                    tab.label = Content(label)
+                if isinstance(tab, DocumentTab):
+                    tab.set_title(self.label(document))
+                    conflict = document.conflict and self.editor.conf.get("conflict_color") is not None
+                    draft = (not conflict and not document.autosave_eligible
+                             and self.editor.conf.get("draft_color") is not None)
+                    tab.set_class(conflict, "state-conflict")
+                    tab.set_class(draft, "state-draft")
 
     async def reconcile(self) -> None:
         self._reconciling = True
@@ -198,7 +237,7 @@ class FileEditorApp(App[None]):
                                 show_line_numbers=True, tab_behavior="indent")
                 self.areas[document.id] = area
                 await container.mount(area)
-                await tabs.add_tab(Tab(Content(self.label(document)), id=f"tab-{document.id}"))
+                await tabs.add_tab(DocumentTab(self.label(document), document.id))
         self.screen_stack[0].query_one("#empty").display = not self.editor.files
         self.editor.session.active = active
         self.update_labels()
@@ -210,7 +249,10 @@ class FileEditorApp(App[None]):
         for identity, area in self.areas.items():
             area.display = active is not None and identity == active.id
         if active is not None and active.id in self.areas:
-            self.screen_stack[0].query_one("#tabs", Tabs).active = f"tab-{active.id}"
+            tabs = self.screen_stack[0].query_one("#tabs", Tabs)
+            tabs.active = f"tab-{active.id}"
+            if tabs.active_tab is not None:
+                self.call_after_refresh(tabs.active_tab.scroll_visible, animate=False, force=True)
             self.areas[active.id].focus()
 
     def on_tabs_tab_activated(self, event: Tabs.TabActivated) -> None:
@@ -306,9 +348,8 @@ class FileEditorApp(App[None]):
                 return
         await self._remove_documents(exiting=True)
 
-    async def _remove_documents(self, *, exiting: bool) -> None:
+    async def _remove_documents(self, *, exiting: bool, document: SessionFile | None = None) -> None:
         self.sync_text()
-        document = self.editor.session.active
         try:
             if exiting:
                 self.editor.exit()
@@ -335,7 +376,14 @@ class FileEditorApp(App[None]):
     @work(group="commands")
     async def action_close(self) -> None:
         if self.can_interact():
-            await self._remove_documents(exiting=False)
+            await self._remove_documents(exiting=False, document=self.editor.session.active)
+
+    @work(group="commands")
+    async def on_document_tab_close_requested(self, event: DocumentTab.CloseRequested) -> None:
+        if self.can_interact():
+            document = next((d for d in self.editor.files if d.id == event.document_id), None)
+            if document is not None:
+                await self._remove_documents(exiting=False, document=document)
 
     def action_cancel(self) -> None:
         if isinstance(self.screen, DiscardDialog):

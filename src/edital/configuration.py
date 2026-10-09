@@ -1,5 +1,6 @@
 """Validated instance settings and native per-user storage locations."""
 
+import re
 from collections.abc import Callable
 from importlib.resources import files
 from pathlib import Path
@@ -62,6 +63,13 @@ class EditalConf:
         elif key in ("cache", "prompt", "auto_restore"):
             if type(value) is not bool:
                 raise ValueError(f"{key} must be a boolean")
+        elif key in ("focus_color", "draft_color", "conflict_color"):
+            nullable = key != "focus_color"
+            if not (nullable and value is None) and not (
+                isinstance(value, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", value)
+            ):
+                suffix = " or null (None)" if nullable else ""
+                raise ValueError(f"{key} must be a quoted #RRGGBB color{suffix}")
         else:
             raise ValueError(f"Unknown configuration key: {key}")
         self._values[key] = value
