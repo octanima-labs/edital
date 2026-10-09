@@ -59,13 +59,13 @@ def test_find_paste_selection_undo_redo_and_resize():
     async def exercise():
         app = EditorApp("alpha beta")
         async with app.run_test() as pilot:
-            await pilot.press("f3")
-            app.query_one(Input).value = "beta"
+            await pilot.press("f4")
+            app.query_one("#find", Input).value = "beta"
             await pilot.press("enter")
             area = app.query_one(TextArea)
-            assert area.cursor_location == (0, 6)
+            assert area.selected_text == "beta"
             assert area.text == "alpha beta"
-            await pilot.press("escape", "shift+right")
+            await pilot.press("escape", "left", "shift+right")
             assert area.selected_text == "b"
             app.post_message(Paste("B"))
             await pilot.pause()

@@ -5,16 +5,18 @@ from typing import ClassVar
 
 from textual import work
 from textual.app import App, ComposeResult
-from textual.binding import Binding, BindingType
+from textual.binding import BindingType
 from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.timer import Timer
 from textual.widgets import Button, Footer, Input, Static, Tabs, TextArea
 
 from .app import DialogActions, DiscardDialog
+from .controls import HelpDialog, bindings, cheatsheet
 from .documents import SessionFile
 from .editor import ConfirmationRequired, Edital
-from .tabs import DocumentTab
+from .search import SearchPanel
+from .tabs import DocumentTab, DocumentTabs
 
 
 class PathDialog(ModalScreen[str | None]):
@@ -29,14 +31,16 @@ class PathDialog(ModalScreen[str | None]):
     }
     """
 
-    def __init__(self, title: str) -> None:
+    def __init__(self, title: str, submit: Callable[[str], None] | None = None) -> None:
         super().__init__()
         self.dialog_title = title
+        self.submit = submit
 
     def compose(self) -> ComposeResult:
         with Vertical(id="path-dialog"):
             yield Static(self.dialog_title, markup=False)
             yield Input(placeholder="File path", id="path")
+            yield Static("", id="path-error", markup=False)
             with DialogActions():
                 yield Button("Continue", id="continue", variant="primary", compact=True)
                 yield Button("Cancel", id="cancel", compact=True)
@@ -56,6 +60,13 @@ class PathDialog(ModalScreen[str | None]):
     def _submit(self) -> None:
         path = self.query_one(Input).value
         if path.strip():
+            if self.submit is not None:
+                try:
+                    self.submit(path)
+                except (OSError, ValueError) as error:
+                    self.query_one("#path-error", Static).update(str(error))
+                    self.query_one(Input).focus()
+                    return
             self.dismiss(path)
 
     def action_cancel(self) -> None:
@@ -67,17 +78,28 @@ class RecoveryDialog(ModalScreen[str | None]):
 
     BINDINGS: ClassVar[list[BindingType]] = [("escape", "cancel", "Keep unresolved")]
 
-    def __init__(self, document: SessionFile) -> None:
+    def __init__(self, document: SessionFile, *, competing: bool = False) -> None:
         super().__init__()
         self.document = document
+        self.competing = competing
 
     def compose(self) -> ComposeResult:
         with Vertical(id="recovery-dialog"):
-            yield Static(f"Disk changed: {self.document.path}", markup=False)
-            yield Static("Choose a version. No file is written by this choice.")
-            yield Button("Use recovered text", id="recovered", variant="primary")
-            yield Button("Use disk text", id="disk")
-            yield Button("Keep recovery as separate draft", id="draft")
+            path = self.document.path
+            heading = ("Destination is missing" if self.document.disk_text is None
+                       else "Destination has another unsaved document" if self.competing
+                       else "Destination changed since caching")
+            yield Static(f"{heading}: {path}", markup=False)
+            yield Static("Resolve cached changes. No destination file is written by this choice.")
+            yield Button("Restore cached version", id="recovered", variant="primary")
+            yield Static("Keep cached text in this tab for its original destination; save later.")
+            yield Button("Discard cached version", id="disk")
+            yield Static("Remove the cached copy and use the destination version."
+                         if self.document.disk_text is not None else
+                         "Remove the cached copy and leave an empty named draft.")
+            yield Button("Keep cached version as separate draft", id="draft")
+            yield Static("Keep cached text in an unnamed draft; retain the destination tab when available.")
+            yield Static("Escape leaves this conflict unresolved.")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         self.dismiss(event.button.id)
@@ -95,6 +117,7 @@ class FileEditorApp(App[None]):
     TextArea { height: 1fr; }
     #empty { padding: 2; }
     #diagnostic { height: auto; max-height: 5; color: $error; padding: 0 1; }
+    #path-error { height: auto; color: $error; }
     #find { height: 3; }
     TextArea:focus, Input:focus { border: tall $edital-focus; }
     Button:focus { border: tall $edital-focus; }
@@ -112,22 +135,12 @@ class FileEditorApp(App[None]):
     Tab.state-conflict.-active, Tabs:focus Tab.state-conflict.-active { color: $edital-conflict; }
     ModalScreen { align: center middle; background: $background 70%; }
     #recovery-dialog {
-        width: 65; max-width: 100%; height: auto; padding: 1 2; border: thick $primary;
+        width: 65; max-width: 100%; height: auto; max-height: 100%;
+        overflow-y: auto; padding: 1 2; border: thick $primary;
     }
     #recovery-dialog Button { width: 100%; margin-top: 1; }
     """
-    BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("ctrl+n", "new", "New", priority=True),
-        Binding("ctrl+o", "open", "Open", priority=True),
-        Binding("ctrl+s", "save", "Save", priority=True),
-        Binding("ctrl+w", "close", "Close tab", priority=True),
-        Binding("f2", "save_close", "Save & close", priority=True),
-        Binding("f3", "save_exit", "Save all & exit", priority=True),
-        Binding("f4", "find", "Find", priority=True),
-        Binding("ctrl+pagedown", "next_tab", "Next tab", priority=True),
-        Binding("ctrl+pageup", "previous_tab", "Previous tab", priority=True),
-        Binding("escape", "cancel", "Exit", priority=True),
-    ]
+    BINDINGS: ClassVar[list[BindingType]] = bindings("standalone")
 
     def __init__(self, editor: Edital) -> None:
         self.editor = editor
@@ -147,15 +160,14 @@ class FileEditorApp(App[None]):
         return variables
 
     def compose(self) -> ComposeResult:
-        yield Tabs(id="tabs")
+        yield DocumentTabs(id="tabs")
         with Vertical(id="documents"):
             yield Static("No documents. Ctrl+N creates a draft; Ctrl+O opens a file.", id="empty")
-        yield Input(placeholder="Find; Enter finds next, Escape returns to editing", id="find")
+        yield SearchPanel()
         yield Static("", id="diagnostic", markup=False)
         yield Footer()
 
     async def on_mount(self) -> None:
-        self.query_one("#find", Input).display = False
         self.editor._on_exit = self.exit
         self._unsubscribe = self.editor.conf.subscribe(self._configuration_changed)
         await self.reconcile()
@@ -239,6 +251,8 @@ class FileEditorApp(App[None]):
                 await container.mount(area)
                 await tabs.add_tab(DocumentTab(self.label(document), document.id))
         self.screen_stack[0].query_one("#empty").display = not self.editor.files
+        if isinstance(tabs, DocumentTabs):
+            tabs.reorder([d.id for d in self.editor.files])
         self.editor.session.active = active
         self.update_labels()
         self.select_active()
@@ -248,6 +262,9 @@ class FileEditorApp(App[None]):
         active = self.editor.session.active
         for identity, area in self.areas.items():
             area.display = active is not None and identity == active.id
+        self.screen_stack[0].query_one(SearchPanel).attach(
+            self.areas.get(active.id) if active is not None else None
+        )
         if active is not None and active.id in self.areas:
             tabs = self.screen_stack[0].query_one("#tabs", Tabs)
             tabs.active = f"tab-{active.id}"
@@ -273,22 +290,27 @@ class FileEditorApp(App[None]):
     async def _save_document(self, document: SessionFile) -> bool:
         if document.conflict and not await self._resolve_conflict(document):
             return False
-        path = None
         if document.path is None:
-            path = await self.push_screen_wait(PathDialog("Save As"))
+            def save(path: str) -> None:
+                self.sync_text()
+                self.editor.save(document, path=path)
+
+            path = await self.push_screen_wait(PathDialog("Save As", submit=save))
             if path is None:
                 return False
-        self.sync_text()
-        try:
-            self.editor.save(document, path=path)
-        except (OSError, ValueError) as error:
-            self.diagnostic(str(error))
-            return False
+        else:
+            self.sync_text()
+            try:
+                self.editor.save(document)
+            except (OSError, ValueError) as error:
+                self.diagnostic(str(error))
+                return False
         self.update_labels()
         return True
 
     async def _resolve_conflict(self, document: SessionFile) -> bool:
-        choice = await self.push_screen_wait(RecoveryDialog(document))
+        competing = any(d is not document and d.path == document.path for d in self.editor.files)
+        choice = await self.push_screen_wait(RecoveryDialog(document, competing=competing))
         if choice is None:
             return False
         try:
@@ -390,8 +412,8 @@ class FileEditorApp(App[None]):
             self.screen.dismiss(False)
         elif isinstance(self.screen, ModalScreen):
             self.screen.dismiss(None)
-        elif self.query_one("#find", Input).display:
-            self.query_one("#find", Input).display = False
+        elif self.query_one(SearchPanel).display:
+            self.query_one(SearchPanel).close()
             self.select_active()
         else:
             self.request_exit()
@@ -414,25 +436,40 @@ class FileEditorApp(App[None]):
     def action_previous_tab(self) -> None:
         self._switch(-1)
 
+    async def _move(self, offset: int) -> None:
+        current = self.editor.session.active
+        if not self.can_interact() or current is None:
+            return
+        target = self.editor.files.index(current) + offset
+        if 0 <= target < len(self.editor.files):
+            self.editor.session.move(current, target)
+            await self.reconcile()
+
+    @work(group="commands")
+    async def action_move_left(self) -> None:
+        await self._move(-1)
+
+    @work(group="commands")
+    async def action_move_right(self) -> None:
+        await self._move(1)
+
     def action_find(self) -> None:
         if self.can_interact() and self.editor.session.active is not None:
-            find = self.query_one("#find", Input)
-            find.display = True
-            find.focus()
+            self.query_one(SearchPanel).open(self.areas[self.editor.session.active.id], replace=False)
 
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        document = self.editor.session.active
-        if event.input.id != "find" or not event.value or document is None:
-            return
-        area = self.areas[document.id]
-        row, column = area.cursor_location
-        start = sum(len(line) + 1 for line in area.text.split("\n")[:row]) + column
-        index = area.text.find(event.value, start + 1)
-        if index < 0:
-            index = area.text.find(event.value)
-        if index < 0:
-            self.diagnostic("Text not found")
+    def action_replace(self) -> None:
+        if self.can_interact() and self.editor.session.active is not None:
+            self.query_one(SearchPanel).open(self.areas[self.editor.session.active.id], replace=True)
+
+    def action_help(self) -> None:
+        if isinstance(self.screen, HelpDialog):
+            self.screen.dismiss(None)
         else:
-            area.move_cursor((area.text.count("\n", 0, index), index - area.text.rfind("\n", 0, index) - 1),
-                             center=True)
-            self.diagnostic("")
+            active = self.editor.session.active
+            area = self.areas.get(active.id) if active is not None else None
+            self.push_screen(HelpDialog(cheatsheet("standalone", area, type(self.screen).__name__, self._bindings)))
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if isinstance(self.screen, HelpDialog) and action in ("quit", "command_palette"):
+            return False
+        return super().check_action(action, parameters)

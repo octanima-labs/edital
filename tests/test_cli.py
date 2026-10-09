@@ -101,7 +101,7 @@ def test_cache_commands_without_ui(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(Edital, "run", forbidden)
     assert main(["cache", "list"]) == 0
     assert "draft\t2 bytes" in capsys.readouterr().out
-    assert main(["cache", "purge"]) == 0
+    assert main(["cache", "purge", "--force"]) == 0
     assert not editor.cache
 
 
@@ -112,6 +112,72 @@ def test_operational_error(monkeypatch, capsys):
     monkeypatch.setattr(Edital, "run", fail)
     assert main([]) == 1
     assert "interactive terminal required" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("answer", ["y\n", "YES\n", "n\n", "\n", ""])
+def test_purge_confirmation(answer, monkeypatch, capsys, tmp_path):
+    import io
+
+    from edital import cli
+
+    path = tmp_path / "file"
+    path.write_text("destination")
+    editor = Edital()
+    document, = editor.open(path)
+    document.text = "cached"
+    editor.exit()
+    stream = io.StringIO(answer)
+    monkeypatch.setattr(stream, "isatty", lambda: True)
+    monkeypatch.setattr(cli.sys, "stdin", stream)
+    monkeypatch.setattr(Edital, "run", lambda *a, **k: pytest.fail("Purge must not run UI"))
+    assert main(["cache", "purge"]) == 0
+    assert bool(editor.cache) is (answer.strip().lower() not in ("y", "yes"))
+    assert path.read_text() == "destination"
+    output = capsys.readouterr()
+    assert "1 recovery snapshots" in output.err
+    assert "[y/N]" in output.err and "unsaved work will be lost" in output.err
+
+
+@pytest.mark.parametrize("force", [None, "-f", "--force"])
+def test_unattended_purge_never_reads_input(force, monkeypatch, capsys):
+    from edital import cli
+
+    class PipedInput:
+        def isatty(self):
+            return False
+
+        def readline(self):
+            pytest.fail("Unattended purge must not consume piped input")
+
+    editor = Edital()
+    editor.new().text = "cached"
+    editor.exit()
+    monkeypatch.setattr(cli.sys, "stdin", PipedInput())
+    assert main(["cache", "purge", *([force] if force else [])]) == (0 if force else 1)
+    assert bool(editor.cache) is (force is None)
+    if force is None:
+        assert "--force" in capsys.readouterr().err
+
+
+def test_empty_purge_and_force_only_for_purge(capsys):
+    assert main(["cache", "purge"]) == 0
+    assert "No recovery snapshots" in capsys.readouterr().out
+    with pytest.raises(SystemExit) as error:
+        main(["cache", "list", "--force"])
+    assert error.value.code == 2
+
+
+def test_force_purge_reports_operational_error(monkeypatch, capsys):
+    editor = Edital()
+    editor.new().text = "cached"
+    editor.exit()
+
+    def fail(self):
+        raise OSError("cannot purge")
+
+    monkeypatch.setattr(Edital, "clear_cache", fail)
+    assert main(["cache", "purge", "-f"]) == 1
+    assert editor.cache and "cannot purge" in capsys.readouterr().err
 
 
 def test_configured_startup_and_suppression(tmp_path, user_storage, launches):

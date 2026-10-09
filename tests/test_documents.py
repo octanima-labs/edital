@@ -82,3 +82,26 @@ def test_unsupported_and_duplicate_save_destination(tmp_path):
     one, two = session.open(tmp_path / "one", tmp_path / "two")
     with pytest.raises(ValueError, match="already open"):
         session.save(one, path=two.path)
+
+
+def test_headless_move_keeps_identity_selection_and_ordered_saving(tmp_path, monkeypatch):
+    session = EditalSession()
+    first, second, third = session.open(*(tmp_path / name for name in ("a", "b", "c")))
+    session.active = second
+    second.text = "unsaved"
+    state = vars(second).copy()
+    session.move(second, 2)
+    assert session.files == (first, third, second)
+    assert session.active is second and vars(second) == state
+    order = []
+    monkeypatch.setattr(session, "save", lambda doc: order.append(doc))
+    session.save_all()
+    assert order == [first, third, second]
+    for index in (-1, 3):
+        with pytest.raises(ValueError, match="position"):
+            session.move(second, index)
+        assert session.files == (first, third, second)
+    session.remove(first)
+    with pytest.raises(ValueError, match="not open"):
+        session.move(first, 0)
+    assert session.files == (third, second) and session.active is second

@@ -140,12 +140,37 @@ class Edital:
         return tuple(result)
 
     def resolve_recovery(self, document: Document, choice: Literal["recovered", "disk", "draft"]) -> None:
-        """Resolve a conflict in memory; selecting recovered text does not save it."""
+        """Resolve a cached-version conflict without writing destination files.
+
+        Args:
+            document: Conflicting open document handle or destination.
+            choice: ``recovered`` restores cached text for its original destination;
+                ``disk`` discards the snapshot and adopts destination text (or an
+                empty named draft when missing); ``draft`` keeps cached text in a
+                separate unnamed draft with its recovery association retained.
+
+        Raises:
+            ValueError: If the choice is invalid, no conflict exists, or another
+                unsaved document blocks the choice. Rejected choices preserve
+                the snapshot and document state.
+            OSError: If preparing the destination-version document fails.
+        """
         current = self.session.resolve(document)
         if not current.conflict:
             raise ValueError("Document has no unresolved recovery conflict")
         if choice not in ("recovered", "disk", "draft"):
             raise ValueError("Choose recovered, disk, or draft")
+        # Validate and prepare before removing snapshots or changing documents.
+        other = next((d for d in self.files if d is not current and current.path is not None
+                      and d.path is not None and (d.path == current.path or
+                      (d.path.exists() and current.path.exists() and d.path.samefile(current.path)))), None)
+        if choice != "draft" and other is not None and (other.modified or other.recovery_id is not None):
+            raise ValueError("Path has another unsaved document; keep recovery as a draft")
+        original = current.path
+        prepared = None
+        if choice == "draft" and original is not None and original.exists() and other is None:
+            text = read_text(original)
+            prepared = SessionFile(original, text, text, True, line_ending(text))
         if choice == "disk":
             if current.recovery_id is not None:
                 self._recovery.remove(current.recovery_id)
@@ -155,18 +180,14 @@ class Edital:
         if choice == "draft":
             # Keep the disk version in its named tab, and retain snapshot ownership
             # on the recovered draft until it is explicitly saved or discarded.
-            original = current.path
             current.path = None
             current.draft_name = self.session.draft_name()
             current.baseline = ""
             current.autosave_eligible = False
-            if original is not None and original.exists():
-                self.session.open(original)
+            if prepared is not None:
+                self.session.add(prepared)
         else:
-            other = self.session.find_path(current.path) if current.path is not None else None
             if other is not None and other is not current:
-                if other.modified or other.recovery_id is not None:
-                    raise ValueError("Path has another unsaved document; keep recovery as a draft")
                 self.session.remove(other)
             current.baseline = current.disk_text or ""
             current.autosave_eligible = current.disk_text is not None
@@ -175,7 +196,10 @@ class Edital:
         self.session.active = current
 
     def clear_cache(self) -> None:
-        """Purge persisted snapshots without changing open documents or files."""
+        """Purge snapshots without prompting or changing open documents/files.
+
+        Confirmation and the force flag belong to CLI purge, not this headless API.
+        """
         self._recovery.purge()
 
     def list(self, cache: bool = False) -> tuple[SessionFile | CacheFile, ...]:

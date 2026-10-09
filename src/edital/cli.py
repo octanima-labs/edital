@@ -25,7 +25,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         epilog="""commands:
   conf          Edit user configuration; restart to apply saved changes.
   cache list    List recovery snapshots with identifiers, paths, and byte sizes.
-  cache purge   Remove all recovery snapshots without changing destination files.
+  cache purge   Confirm removal of recovery snapshots; destination files unchanged.
+                Use -f/--force to skip confirmation (required without a terminal).
 
 examples:
   edital notes.txt new-file.txt    Open files or new named drafts.
@@ -56,14 +57,20 @@ Use -- before filenames named conf or cache, or beginning with a dash.""",
                 epilog="""operations:
   list    List snapshot identifiers, paths (or draft), and UTF-8 byte sizes.
   purge   Remove all recovery snapshots without changing destination files.
+          Confirm first, or use -f/--force to skip confirmation.
 
 examples:
   edital cache list
   edital cache purge""",
             )
-            maintenance.add_argument("operation", choices=("list", "purge"),
-                                     help="Recovery snapshot operation")
-            operation = maintenance.parse_args(arguments).operation
+            operations = maintenance.add_subparsers(dest="operation", required=True)
+            operations.add_parser("list", help="List recovery snapshots")
+            purge = operations.add_parser("purge", help="Confirm removal of recovery snapshots",
+                                          description="Remove cached unsaved work; destination files stay unchanged.")
+            purge.add_argument("-f", "--force", action="store_true",
+                               help="Skip confirmation; required without interactive input")
+            maintenance_options = maintenance.parse_args(arguments)
+            operation = maintenance_options.operation
         else:
             configuration = argparse.ArgumentParser(prog="edital conf", description="Edit user configuration; restart to apply")
             configuration.parse_args(arguments)
@@ -90,6 +97,20 @@ examples:
         editor = Edital(**overrides)
         if command == "cache":
             if operation == "purge":
+                count = len(editor.cache)
+                if not count:
+                    print("No recovery snapshots to purge.")
+                    return 0
+                if not maintenance_options.force:
+                    if not sys.stdin.isatty():
+                        raise RuntimeError("Cache purge requires interactive confirmation; use --force to omit it")
+                    print(f"Remove {count} recovery snapshots? Cached unsaved work will be lost.\n"
+                          "Destination files are unchanged. Continue? [y/N] ",
+                          end="", file=sys.stderr, flush=True)
+                    answer = sys.stdin.readline().strip().lower()
+                    if answer not in ("y", "yes"):
+                        print("Purge cancelled.", file=sys.stderr)
+                        return 0
                 editor.clear_cache()
             else:
                 for entry in editor.cache:

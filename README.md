@@ -38,16 +38,27 @@ edital fresh.txt --no-cache        # Fresh session; existing snapshots are retai
 edital notes.txt --auto-save 2000  # Save dirty eligible files every two seconds.
 edital conf                       # Edit settings; restart to apply saved changes.
 edital cache list
-edital cache purge
+edital cache purge                # Confirm before removing cached unsaved work.
+edital cache purge --force        # Skip confirmation (required for unattended use).
 edital -- conf                    # Open a file literally named "conf".
 ```
 
 No paths opens recovered documents when requested or configured, otherwise an
 unnamed draft. Missing paths open named drafts, without creating
 files until an explicit save. **F2** saves and closes the current tab, **F3** saves
-all and exits, **F4** opens Find, and **Escape** exits (after dismissing active
-dialogs or Find). Ctrl+S saves, Ctrl+W closes a tab without caching, Ctrl+N creates
-a draft, Ctrl+O opens a file, and Ctrl+PageUp/PageDown switches tabs.
+all and exits, **F4** opens Find, and **F5** opens Find/Replace. **F1** opens a
+scrollable cheatsheet with all bindings, including editing shortcuts hidden from
+the footer. **Escape** dismisses help, dialogs, or search first, then exits.
+Ctrl+S saves, Ctrl+W closes a tab without caching, Ctrl+N creates a draft,
+Ctrl+O opens a file, and Ctrl+PageUp/PageDown switches tabs.
+**Ctrl+Shift+PageUp/PageDown** moves the active tab left/right without wrapping or
+losing its cursor, selection, or undo history. Mouse dragging is deferred.
+
+Find/Replace matches literal, case-sensitive text in the current document.
+Find next selects a match and wraps; Replace changes the selected match, and
+Replace all reports a count and can be undone in one step. An empty replacement
+deletes matches. Save As keeps its prompt and entered path open on errors, so you
+can correct a duplicate destination or filesystem failure and retry.
 
 Left-click a tab name to select it or its right-side **⨯** to close that document
 without caching (with discard confirmation when enabled). Closing an inactive tab
@@ -63,6 +74,12 @@ requires confirmation. Enable recovery for one launch with `--recover`, or set
 both restoration and caching. Recovery covers orderly exit, not crashes.
 Autosave only applies to files loaded from disk or explicitly
 saved. **Escape does not undo content already autosaved.**
+
+Recovery conflicts offer **Restore cached version**, **Discard cached version**,
+or **Keep cached version as separate draft**, with explanations for each choice.
+Restoring changes memory, not the destination file. A separate draft is unnamed
+and must be saved explicitly. CLI cache purge defaults to No; the headless
+`editor.clear_cache()` API remains unprompted.
 
 ### File-session API
 
@@ -139,16 +156,26 @@ Without a validator, arbitrary text, including empty text, can be accepted.
 `TuiEditor.edit()` exposes the same blocking session interface for integrations.
 Import these APIs directly from `edital`.
 
-### Embedded controls
+### Shared controls
 
 | Key | Action |
 | --- | --- |
-| **F2** | Save & close: validate and accept the current text. |
-| **Esc** | Cancel; changed text requires discard confirmation. In Find, return to editing. |
-| **F3** | Find text; Enter locates the next occurrence, wrapping to the start. |
+| **F1** | Scrollable keyboard cheatsheet; Escape or F1 returns to the prior interaction. |
+| **F2** | Save and close the standalone tab; validate and accept embedded text. |
+| **F3** | Save all and exit standalone; validate and accept the sole embedded document. |
+| **F4** | Find text; Enter selects the next occurrence, wrapping to the start. |
+| **F5** | Find/Replace, including Replace all in the current document. |
+| **Esc** | Dismiss the active interaction; otherwise exit standalone or cancel embedded. |
 | **Ctrl-Z / Ctrl-Y** | Undo / redo. |
 | **Shift + arrows** | Select text. |
+| **F6** | Select line. |
 | **F7** | Select all. |
+
+**Compatibility note:** embedded Find moved from F3 to F4. F3 now accepts text
+after validation, just like F2. Embedded Ctrl+S is unavailable and does not accept
+or close; Ctrl+W is reserved and no longer deletes a word. File/tab actions remain
+standalone-only. Use Ctrl+Backspace or Alt+Backspace to delete the previous word
+in either editor. Ctrl+A moves to line start; use F7 for Select all.
 
 Selection, copy/cut/paste, navigation, and indentation use Textual's TextArea.
 Terminal paste is supported; operating-system clipboard integration depends on

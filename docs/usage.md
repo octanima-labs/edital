@@ -11,7 +11,8 @@ edital existing.txt --auto-save 1000
 edital --no-cache --no-prompt        # Explicit discard without confirmation.
 edital conf                        # Saved configuration takes effect on restart.
 edital cache list                   # Snapshot identifiers, destinations, and UTF-8 content sizes.
-edital cache purge                  # Remove snapshots, not destination files.
+edital cache purge                  # Confirm removal; destination files stay unchanged.
+edital cache purge -f               # Unattended purge; --force is equivalent.
 edital -- conf cache                # Open reserved command names as files.
 ```
 
@@ -20,6 +21,16 @@ commands do not launch the TUI or restore documents. `edital conf` opens only th
 configuration file even when automatic restoration is enabled.
 Interactive editing requires terminal input/output.
 Documents are UTF-8 with uniform LF/CRLF line endings.
+
+`edital -h` lists all commands, editing options, and examples. Use
+`edital cache purge -h` for purge-specific options. Purging a nonempty cache asks
+for confirmation and defaults to No; only `y` or `yes` approves removal. The prompt
+shows the snapshot count and warns that cached unsaved work will be lost. Declining,
+empty input, or end-of-input leaves snapshots intact. Without interactive input,
+nonempty-cache purge fails unless `-f`/`--force` is supplied; it does not consume
+piped input. An empty cache reports nothing to purge and succeeds without prompting.
+Force belongs only to purge, not list. `--no-prompt` concerns editor discard and
+does not bypass CLI purge confirmation.
 
 ### File-session lifecycle
 
@@ -41,6 +52,13 @@ text, and derived `modified` state. Handles address unnamed drafts unambiguously
 paths can also select open named documents. Reopening the same normalized path
 selects its existing document. Opening a missing path does not create it.
 
+`editor.session.move(document, index)` moves an existing document to a zero-based
+position without changing the active handle, content, baseline, or recovery state.
+The target must be in range; invalid/stale handles and invalid positions raise
+`ValueError` before changing order. The read-only `files` tuple, tab traversal, and
+save-all operations follow this order. Moving documents headlessly does not import
+or launch the UI.
+
 Set `auto_restore=True` through configuration or the constructor to restore at
 `run()` rather than explicitly calling `restore()`:
 
@@ -59,6 +77,11 @@ after restoration. The CLI uses that fallback automatically.
 draft without a destination raises `ValueError`; the TUI asks for Save As instead.
 `save_all()` saves sequentially; a later failure does not undo successful saves.
 Errors preserve unsaved buffers and keep the interactive session open.
+For an unnamed draft, Save As performs the write before closing its prompt. A
+destination already open in another tab or an actual write failure appears inline
+with the entered path retained. Correct it and retry, or cancel to keep editing.
+F2 does not close the tab on failure; F3 does not exit on failure or cancellation.
+Earlier successful saves during F3 remain committed.
 
 ```python
 editor = Edital(cache=False)
@@ -180,12 +203,26 @@ snapshots without enabling exit caching. Use `auto_restore=False` as a construct
 override for a fresh API session. Explicit `restore()` remains available either way.
 
 If disk still matches the saved baseline, explicitly opening and recovering the
-same path produces one recovered tab. If disk changed, choose recovered text, disk
-text, or a separate recovered draft. Autosave is blocked until that conflict is
-resolved; choosing recovered text changes memory only. Headless callers inspect
+same path produces one recovered tab. When a destination changed, became missing,
+or conflicts with another unsaved tab, the prompt offers:
+
+- **Restore cached version**: keep cached text in memory for the original
+  destination. This choice itself does not write the destination file.
+- **Discard cached version**: remove the cached copy and use destination text;
+  if the destination is missing, leave an empty named draft instead.
+- **Keep cached version as separate draft**: detach cached text into an unnamed
+  draft, retaining its snapshot association until saved/discarded. Preserve the
+  destination-version tab when available; no separate file is created yet.
+
+Escape leaves the conflict unresolved. A named draft whose destination was already
+missing when cached does not become conflicting solely because it remains missing.
+Rejected choices preserve cached content and unresolved state, including when
+another unsaved document prevents restoring/discarding at the same path.
+Autosave is blocked until the conflict is resolved. Headless callers inspect
 `document.conflict` and call `editor.resolve_recovery(document, "recovered")`,
 `"disk"`, or `"draft"`. Successful saving removes the associated snapshot.
-`clear_cache()` removes persisted snapshots without changing open buffers.
+`clear_cache()` removes persisted snapshots without changing open buffers. It
+remains an unprompted headless API with no force parameter; confirmation is CLI-only.
 
 ### Standalone controls
 
@@ -194,10 +231,14 @@ resolved; choosing recovered text changes memory only. Headless callers inspect
 | Ctrl+N / Ctrl+O | New draft / open path |
 | Ctrl+S | Save current document; Save As for unnamed drafts |
 | Ctrl+W | Close current tab without caching; confirm if dirty |
+| F1 | Grouped, scrollable keyboard cheatsheet |
 | F2 | Save and close current tab |
 | F3 | Save all and exit |
 | F4 | Find in current document |
+| F5 | Find/Replace in current document |
+| F6 / F7 | Select line / all |
 | Ctrl+PageDown / Ctrl+PageUp | Next / previous tab |
+| Ctrl+Shift+PageUp / Ctrl+Shift+PageDown | Move active tab left / right |
 | Escape | Dismiss active interaction; otherwise exit using configured caching |
 
 Tabs preserve text, cursor, selection, and undo history. Dirty tabs show **⏺**
@@ -206,6 +247,8 @@ both states appear as `▲ ⏺ name`. Undoing back to the saved baseline removes
 the dirty marker. Resolving a conflict removes its icon and conflict coloring.
 Unnamed labels are `draft`, `draft (1)`, etc., without renumbering after a close.
 Same-named files show disambiguated paths.
+Moving tabs stops at the ends without wrapping, preserves editing state and stable
+draft labels, and keeps the active tab visible. Mouse drag-to-reorder is deferred.
 
 Left-click a tab name to select it. Left-click its right-side **⨯** to close that
 document without caching, following the same confirmation rules as Ctrl+W.
@@ -227,7 +270,7 @@ if result.outcome == "accepted":
     print(result.text)
 ```
 
-The session is blocking. **F2** validates and accepts the text, then closes the UI.
+The session is blocking. **F2** or **F3** validates and accepts the text, then closes the UI.
 **Esc** cancels, asking for confirmation when the text has changed. Cancellation
 does not accept or save edited text. An unchanged buffer and an empty buffer can
 both be accepted explicitly.
@@ -260,15 +303,50 @@ configuration, write destination files, autosave, or create recovery snapshots.
 
 | Key | Action |
 | --- | --- |
-| F2 | Save & close |
-| Esc | Cancel, or leave Find |
-| F3 | Open Find; Enter finds the next occurrence, wrapping to the start |
+| F1 | Complete keyboard cheatsheet |
+| F2 / F3 | Validate, accept the sole document, and close; no file is written |
+| F4 | Open Find; Enter selects the next occurrence, wrapping to the start |
+| F5 | Open Find/Replace |
+| Esc | Dismiss interaction first; otherwise cancel |
 | Ctrl-Z / Ctrl-Y | Undo / redo |
 | Shift + arrows | Select text |
+| F6 | Select line |
 | F7 | Select all |
+
+Embedded F3 is now acceptance, not Find: use F4 in both modes. File/tab-only keys
+(Ctrl+S/N/O/W and modified PageUp/PageDown tab actions) are unavailable in embedded
+document editing and are not repurposed. Ctrl+S does not accept or close. Ctrl+W
+does not delete text; use Ctrl+Backspace or Alt+Backspace for previous-word deletion.
+Ctrl+A retains line-start navigation; F7 selects all.
 
 Textual provides ordinary navigation, indentation, selection, copy/cut/paste, and
 terminal paste. System clipboard availability depends on the terminal.
+
+## Find, replace, and help in both editors
+
+F4 opens Find and F5 opens Find/Replace, retaining the search term when switching
+modes. Matching is literal and case-sensitive, including punctuation. Enter in
+the search input or Find next selects the next occurrence and wraps at the end.
+The panel reports matching results or no matches inline. Empty search is rejected.
+
+Replace changes a valid selected match and advances. With no valid selected match,
+it finds/selects one first rather than replacing unrelated selected text. An empty
+replacement deletes matches. Replace all affects only the current document and
+reports its count. It replaces original, non-overlapping matches without searching
+inserted replacement text: changing `a` to `aa` terminates normally. One Undo restores
+the entire pre-operation text, earlier editing history remains available, and Redo
+reapplies the replacement. Newline conventions remain intact.
+
+Escape closes search and returns focus to editing without accepting or exiting.
+Embedded replacement still requires validated F2/F3 acceptance and never writes
+files, initializes standalone configuration, autosaves, or caches text.
+
+F1 opens help even over a path, recovery, or discard dialog. It groups effective
+document shortcuts, contextual controls, and mode availability; application overrides
+take precedence over inherited TextArea aliases. The compact footer shows common
+actions while F1 exposes hidden bindings. Scroll help with arrow keys or PageUp/
+PageDown. Escape or F1 closes it, preserving the prior focus, entered values, and
+editing state. Save, exit, and tab actions do not execute through the help screen.
 
 ## Fidelity and errors
 

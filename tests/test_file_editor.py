@@ -193,3 +193,60 @@ def test_recovered_draft_label_and_disk_newlines(tmp_path):
     restored, = other.restore()
     other.resolve_recovery(restored, "disk")
     assert restored.newline == "\n" and restored.text == "external\n"
+
+
+@pytest.mark.parametrize("choice", ["disk", "recovered"])
+def test_rejected_duplicate_resolution_preserves_snapshot_and_state(tmp_path, choice):
+    path = tmp_path / "file"
+    path.write_text("base")
+    prior = Edital()
+    document, = prior.open(path)
+    document.text = "cached"
+    prior.exit()
+    editor = Edital()
+    other, = editor.open(path)
+    other.text = "independent unsaved edit"
+    restored, = editor.restore()
+    state, snapshots = vars(restored).copy(), editor.cache
+    with pytest.raises(ValueError, match="another unsaved"):
+        editor.resolve_recovery(restored, choice)
+    assert vars(restored) == state and editor.cache == snapshots
+    assert other.text == "independent unsaved edit" and restored.conflict
+    editor.resolve_recovery(restored, "draft")
+    assert restored.path is None and restored.recovery_id == state["recovery_id"]
+    assert other in editor.files and other.text == "independent unsaved edit"
+    assert restored.text == "cached" and editor.cache == snapshots
+    assert path.read_text() == "base"
+
+
+def test_missing_named_draft_is_not_a_recovery_conflict(tmp_path):
+    path = tmp_path / "never-created"
+    prior = Edital()
+    draft, = prior.open(path)
+    draft.text = "cached draft"
+    prior.exit()
+    editor = Edital()
+    restored, = editor.restore()
+    assert not restored.conflict and restored.text == "cached draft"
+    assert not restored.autosave_eligible and not path.exists()
+
+
+def test_separate_draft_read_failure_is_nondestructive(tmp_path, monkeypatch):
+    path = tmp_path / "file"
+    path.write_text("base")
+    prior = Edital()
+    document, = prior.open(path)
+    document.text = "cached"
+    prior.exit()
+    path.write_text("changed")
+    editor = Edital()
+    restored, = editor.restore()
+    state, snapshots = vars(restored).copy(), editor.cache
+
+    def fail(path):
+        raise OSError("cannot read destination")
+
+    monkeypatch.setattr("edital.editor.read_text", fail)
+    with pytest.raises(OSError, match="cannot read"):
+        editor.resolve_recovery(restored, "draft")
+    assert vars(restored) == state and editor.cache == snapshots

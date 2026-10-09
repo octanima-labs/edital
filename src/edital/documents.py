@@ -141,3 +141,19 @@ class EditalSession:
         self._files.remove(current)
         if self.active is current:
             self.active = self._files[min(index, len(self._files) - 1)] if self._files else None
+
+    def move(self, document: Document, index: int) -> None:
+        """Move an open document to a zero-based position without changing selection.
+
+        Args:
+            document: An open handle or destination path.
+            index: Target position in the ordered document view.
+
+        Raises:
+            ValueError: If the document is not open or the index is out of range.
+        """
+        current = self.resolve(document)
+        if not 0 <= index < len(self._files):
+            raise ValueError("Document position is out of range")
+        self._files.remove(current)
+        self._files.insert(index, current)

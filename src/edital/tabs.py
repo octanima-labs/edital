@@ -1,12 +1,14 @@
 """Close-aware tabs that retain Textual's navigation and scrolling."""
 
 import sys
+from itertools import pairwise
 
 from rich.cells import cell_len
 from textual import events
 from textual.content import Content
 from textual.message import Message
-from textual.widgets import Tab
+from textual.widget import Widget
+from textual.widgets import Tab, Tabs
 
 
 def close_glyph() -> str:
@@ -57,3 +59,15 @@ class DocumentTab(Tab):
             self.post_message(self.CloseRequested(self.document_id))
         else:
             self.post_message(self.Clicked(self))
+
+
+class DocumentTabs(Tabs):
+    """Keep Textual's tab layout aligned with authoritative session order."""
+
+    def reorder(self, identities: list[str]) -> None:
+        """Move headers in place, retaining buffers and active tab identity."""
+        headers = [self.get_tab(f"tab-{identity}") for identity in identities]
+        for previous, current in pairwise(headers):
+            if current is not None and previous is not None and isinstance(current.parent, Widget):
+                current.parent.move_child(current, after=previous)
+        self.call_after_refresh(self._highlight_active, animate=False)

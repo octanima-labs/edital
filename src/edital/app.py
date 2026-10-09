@@ -4,11 +4,13 @@ from typing import ClassVar
 
 from textual import events
 from textual.app import App, ComposeResult
-from textual.binding import Binding, BindingType
+from textual.binding import BindingType
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Footer, Input, Static, TextArea
+from textual.widgets import Button, Footer, Static, TextArea
 
+from .controls import EmbeddedTextArea, HelpDialog, bindings, cheatsheet
+from .search import SearchPanel
 from .session import EditResult, Validator, line_ending
 
 
@@ -74,11 +76,7 @@ class EditorApp(App[EditResult]):
     #diagnostic { height: auto; max-height: 8; padding: 0 1; color: $error; }
     #find { height: 3; }
     """
-    BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("f2", "accept", "Save & close", priority=True),
-        Binding("escape", "cancel", "Cancel", priority=True),
-        Binding("f3", "find", "Find", priority=True),
-    ]
+    BINDINGS: ClassVar[list[BindingType]] = bindings("embedded")
 
     def __init__(self, initial_text: str = "", *, title: str = "Text editor",
                  validator: Validator | None = None) -> None:
@@ -91,14 +89,13 @@ class EditorApp(App[EditResult]):
 
     def compose(self) -> ComposeResult:
         yield Static(self.title, id="title", markup=False)
-        yield TextArea(self.initial_text.replace("\r\n", "\n"), id="buffer",
-                       show_line_numbers=True, tab_behavior="indent")
-        yield Input(placeholder="Find text; Enter finds next, Escape returns to editing", id="find")
+        yield EmbeddedTextArea(self.initial_text.replace("\r\n", "\n"), id="buffer",
+                        show_line_numbers=True, tab_behavior="indent")
+        yield SearchPanel()
         yield Static("", id="diagnostic", markup=False)
         yield Footer()
 
     def on_mount(self) -> None:
-        self.query_one("#find", Input).display = False
         self.query_one(TextArea).focus()
 
     @property
@@ -107,7 +104,7 @@ class EditorApp(App[EditResult]):
         return self.query_one(TextArea).text.replace("\r\n", "\n").replace("\n", self.newline)
 
     def action_accept(self) -> None:
-        if isinstance(self.screen, DiscardDialog):
+        if isinstance(self.screen, ModalScreen):
             return
         candidate = self.candidate
         try:
@@ -123,13 +120,15 @@ class EditorApp(App[EditResult]):
         self.exit(EditResult("accepted", candidate))
 
     def action_cancel(self) -> None:
+        if isinstance(self.screen, HelpDialog):
+            self.screen.dismiss(None)
+            return
         if isinstance(self.screen, DiscardDialog):
             self.screen.dismiss(False)
             return
-        find = self.query_one("#find", Input)
-        if find.display:
-            find.display = False
-            self.query_one(TextArea).focus()
+        search = self.query_one(SearchPanel)
+        if search.display:
+            search.close()
         elif self.candidate != self.initial_text:
             self.push_screen(DiscardDialog(), self._discard_answer)
         else:
@@ -142,25 +141,22 @@ class EditorApp(App[EditResult]):
             self.query_one(TextArea).focus()
 
     def action_find(self) -> None:
-        if isinstance(self.screen, DiscardDialog):
+        if isinstance(self.screen, ModalScreen):
             return
-        find = self.query_one("#find", Input)
-        find.display = True
-        find.focus()
+        self.query_one(SearchPanel).open(self.query_one(TextArea), replace=False)
 
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        if not event.value:
-            return
-        area = self.query_one(TextArea)
-        row, column = area.cursor_location
-        start = sum(len(line) + 1 for line in area.text.split("\n")[:row]) + column
-        index = area.text.find(event.value, start + 1)
-        if index < 0:
-            index = area.text.find(event.value)
-        if index < 0:
-            self.query_one("#diagnostic", Static).update("Text not found")
+    def action_replace(self) -> None:
+        if not isinstance(self.screen, ModalScreen):
+            self.query_one(SearchPanel).open(self.query_one(TextArea), replace=True)
+
+    def action_help(self) -> None:
+        if isinstance(self.screen, HelpDialog):
+            self.screen.dismiss(None)
         else:
-            row = area.text.count("\n", 0, index)
-            column = index - area.text.rfind("\n", 0, index) - 1
-            area.move_cursor((row, column), center=True)
-            self.query_one("#diagnostic", Static).update("")
+            area = self.screen_stack[0].query_one(TextArea)
+            self.push_screen(HelpDialog(cheatsheet("embedded", area, type(self.screen).__name__, self._bindings)))
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if isinstance(self.screen, HelpDialog) and action in ("quit", "command_palette"):
+            return False
+        return super().check_action(action, parameters)
