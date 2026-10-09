@@ -14,8 +14,32 @@ def main(argv: Sequence[str] | None = None) -> int:
     reported by argparse with exit status two. ``--`` escapes command names.
     """
     arguments = list(sys.argv[1:] if argv is None else argv)
-    parser = argparse.ArgumentParser(prog="edital", description="Multi-tab terminal text editor",
-                                     epilog="Commands: conf; cache list; cache purge. Use -- before reserved filenames.")
+    parser = argparse.ArgumentParser(
+        prog="edital",
+        description="Multi-tab terminal text editor. With no paths, open an unnamed draft\n"
+                    "or restore unsaved documents when recovery is configured.",
+        usage="%(prog)s [options] [PATH ...]\n"
+              "       %(prog)s conf [-h]\n"
+              "       %(prog)s cache {list,purge} [-h]",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""commands:
+  conf          Edit user configuration; restart to apply saved changes.
+  cache list    List recovery snapshots with identifiers, paths, and byte sizes.
+  cache purge   Remove all recovery snapshots without changing destination files.
+
+examples:
+  edital notes.txt new-file.txt    Open files or new named drafts.
+  edital --recover                Restore unsaved recovery snapshots.
+  edital notes.txt --auto-save 2000
+                                  Autosave eligible files every two seconds.
+  edital conf                     Edit settings.
+  edital cache list               Inspect cached unsaved work.
+  edital -- conf cache            Open reserved command names as files.
+
+Use edital conf -h or edital cache -h for command-specific help.
+Editing options apply only to file editing, not to commands.
+Use -- before filenames named conf or cache, or beginning with a dash.""",
+    )
     parser.add_argument("paths", nargs="*", metavar="PATH", help="Existing files or new named drafts")
     parser.add_argument("-R", "--recover", action="store_true", help="Restore unsaved recovery snapshots")
     parser.add_argument("--no-cache", action="store_true", help="Disable configured restoration and caching for this session")
@@ -25,8 +49,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     if arguments and arguments[0] in ("conf", "cache"):
         command = arguments.pop(0)
         if command == "cache":
-            maintenance = argparse.ArgumentParser(prog="edital cache", description="Manage recovery snapshots")
-            maintenance.add_argument("operation", choices=("list", "purge"))
+            maintenance = argparse.ArgumentParser(
+                prog="edital cache",
+                description="Manage recovery snapshots without launching the editor.",
+                formatter_class=argparse.RawDescriptionHelpFormatter,
+                epilog="""operations:
+  list    List snapshot identifiers, paths (or draft), and UTF-8 byte sizes.
+  purge   Remove all recovery snapshots without changing destination files.
+
+examples:
+  edital cache list
+  edital cache purge""",
+            )
+            maintenance.add_argument("operation", choices=("list", "purge"),
+                                     help="Recovery snapshot operation")
             operation = maintenance.parse_args(arguments).operation
         else:
             configuration = argparse.ArgumentParser(prog="edital conf", description="Edit user configuration; restart to apply")

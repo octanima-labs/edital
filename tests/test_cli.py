@@ -53,6 +53,34 @@ def test_usage_errors(arguments, user_storage):
     assert not user_storage[0].exists()
 
 
+@pytest.mark.parametrize("flag", ["-h", "--help"])
+@pytest.mark.parametrize("command", [[], ["conf"], ["cache"]])
+def test_help_is_complete_without_startup(command, flag, monkeypatch, capsys, user_storage):
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Help must not initialize the editor")
+
+    monkeypatch.setattr("edital.cli.Edital", forbidden)
+    with pytest.raises(SystemExit) as error:
+        main([*command, flag])
+    assert error.value.code == 0
+    output = capsys.readouterr()
+    assert not output.err
+    assert not user_storage[0].exists()
+    if not command:
+        for text in ("edital conf [-h]", "edital cache {list,purge} [-h]",
+                     "commands:", "conf", "cache list", "cache purge",
+                     "--recover", "--no-cache", "--auto-save", "--no-prompt",
+                     "examples:", "edital -- conf cache"):
+            assert text in output.out
+    elif command == ["cache"]:
+        assert "operations:" in output.out
+        assert "List snapshot identifiers" in output.out
+        assert "Remove all recovery snapshots" in output.out
+        assert "without changing destination files" in output.out
+    else:
+        assert "Edit user configuration; restart to apply" in output.out
+
+
 def test_configuration_and_reserved_paths(tmp_path, monkeypatch, launches):
     monkeypatch.chdir(tmp_path)
     assert main(["conf"]) == 0
