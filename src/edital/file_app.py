@@ -118,9 +118,10 @@ class FileEditorApp(App[None]):
     #empty { padding: 2; }
     #diagnostic { height: auto; max-height: 5; color: $error; padding: 0 1; }
     #path-error { height: auto; color: $error; }
-    #find { height: 3; }
     TextArea:focus, Input:focus { border: tall $edital-focus; }
+    SearchPanel Input:focus { border: none !important; }
     Button:focus { border: tall $edital-focus; }
+    SearchPanel Button:focus { border: none !important; }
     DialogActions Button.-textual-compact:focus {
         border-top: none !important;
         border-bottom: none !important;

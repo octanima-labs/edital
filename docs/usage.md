@@ -325,7 +325,7 @@ terminal paste. System clipboard availability depends on the terminal.
 ## Find, replace, and help in both editors
 
 F4 opens Find and F5 opens Find/Replace, retaining the search term when switching
-modes. Matching is literal and case-sensitive, including punctuation. Enter in
+modes. Matching defaults to literal and case-sensitive, including punctuation. Enter in
 the search input or Find next selects the next occurrence and wraps at the end.
 The panel reports matching results or no matches inline. Empty search is rejected.
 
@@ -336,6 +336,37 @@ reports its count. It replaces original, non-overlapping matches without searchi
 inserted replacement text: changing `a` to `aa` terminates normally. One Undo restores
 the entire pre-operation text, earlier editing history remains available, and Redo
 reapplies the replacement. Newline conventions remain intact.
+
+### Regular expressions
+
+Activate **Regex: OFF** beside Find to switch to **Regex: ON**. Use Tab to reach
+the button and Enter to activate it. It is available in Find and Replace, and its
+setting survives closing/reopening search and changing tabs during this editor
+session. Toggling clears the previous match; Replace must select a new match first.
+
+Regex mode uses Python's `re` syntax and is case-sensitive by default. `^` and `$`
+match individual line boundaries; `.` does not cross newlines. Inline flags such
+as `(?i)` (ignore case) and `(?s)` (dot matches newlines) can change these defaults.
+Patterns operate on normalized LF text, including in CRLF documents.
+
+Replacement supports numbered/named captures and escapes:
+
+| Find | Replace | Example result |
+| --- | --- | --- |
+| `(\w+),\s*(\w+)` | `\g<2> \g<1>` | `Doe, Jane` → `Jane Doe` |
+| `(?P<word>\w+)` | `[\g<word>]` | `hello` → `[hello]` |
+| `^` | `> ` | Prefix every line using Replace all |
+
+Zero-width matches select an insertion position, with line/column feedback;
+Find next advances through them before wrapping. Empty search is still rejected,
+but nonempty patterns can match empty documents. Empty replacement is allowed.
+Invalid patterns or replacement references appear inline without edits; an invalid
+replacement does not prevent Find. Replace all uses original matches and stays
+one undoable operation, including zero-width insertions.
+
+With regex off, both inputs are literal, including backslashes. With regex on,
+use `\\` in a replacement to insert one literal backslash. The standard Python
+regex engine has no execution timeout here; expensive patterns can delay the UI.
 
 Escape closes search and returns focus to editing without accepting or exiting.
 Embedded replacement still requires validated F2/F3 acceptance and never writes

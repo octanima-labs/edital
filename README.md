@@ -54,7 +54,10 @@ Ctrl+O opens a file, and Ctrl+PageUp/PageDown switches tabs.
 **Ctrl+Shift+PageUp/PageDown** moves the active tab left/right without wrapping or
 losing its cursor, selection, or undo history. Mouse dragging is deferred.
 
-Find/Replace matches literal, case-sensitive text in the current document.
+Find/Replace defaults to literal, case-sensitive text in the current document.
+The **Regex: OFF/ON** button beside Find enables Python regular expressions and
+replacement captures: find `(\w+),\s*(\w+)` and replace with `\g<2> \g<1>` to turn
+`Doe, Jane` into `Jane Doe`. The setting is retained for the current editor session.
 Find next selects a match and wraps; Replace changes the selected match, and
 Replace all reports a count and can be undone in one step. An empty replacement
 deletes matches. Save As keeps its prompt and entered path open on errors, so you

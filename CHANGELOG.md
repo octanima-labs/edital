@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- Regex OFF/ON toggle in Find/Replace for both editors, with Python patterns,
+  numbered/named replacement captures, zero-width navigation and insertion,
+  inline validation errors, and atomic undoable Replace all.
 - Shared F5 Find/Replace with literal case-sensitive matching, selected matches,
   current-document Replace all counts, and one-step undo without losing prior history.
 - Scrollable F1 keyboard cheatsheets with styled section headings and highlighted

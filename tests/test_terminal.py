@@ -51,9 +51,9 @@ def test_real_terminal(tmp_path, scenario):
             "editor.session.move=lambda doc,index: (moves.append((doc.path.name,index)),move(doc,index)); "
             "editor.run(); print('TERMINAL_DONE', editor.exited, moves, replacements)"
         )
-        # F5, find term, replacement, Replace all, Escape, Undo, help, native reorder, finish.
+        # F5, find term, skip regex toggle, replacement, Replace all, Undo, help, reorder, finish.
         actions = [(b"\x1b[15~", 0.3), (b"second", 0.2), (b"\r", 0.2),
-                   (b"\t", 0.2), (b"SECOND", 0.2),
+                   (b"\t", 0.2), (b"\t", 0.2), (b"SECOND", 0.2),
                    (b"\t", 0.2), (b"\t", 0.2), (b"\t", 0.2), (b"\r", 0.4),
                    (b"\x1b", 0.3), (b"\x1a", 0.3), (b"\x1bOP", 0.3),
                    (b"\x1b[6~", 0.2), (b"\x1b", 0.3), (b"\x1b[5;6~", 0.3),
@@ -87,7 +87,14 @@ def test_real_terminal(tmp_path, scenario):
                 transcript.extend(os.read(master, 65536))
 
     try:
-        drain(1)
+        # Import/mount time varies under a full suite; do not send keys into
+        # the shell's initial cooked terminal before the editor has rendered.
+        ready_deadline = time.monotonic() + 8
+        ready_text = b"Restore" if scenario == "recovery" else b"Help"
+        while ready_text not in transcript and process.poll() is None and time.monotonic() < ready_deadline:
+            drain(0.1)
+        assert ready_text in transcript, bytes(transcript)[-3000:]
+        drain(0.2)
         for keys, duration in actions:
             if keys is not None:
                 os.write(master, keys)

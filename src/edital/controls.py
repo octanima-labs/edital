@@ -30,7 +30,7 @@ CONTROLS = (
     Control("f2", "save_close", "accept", "Save / accept & close", "Files and session", True),
     Control("f3", "save_exit", "accept", "Save / accept all & finish", "Files and session"),
     Control("f4", "find", "find", "Find", "Find and replace", True),
-    Control("f5", "replace", "replace", "Replace", "Find and replace"),
+    Control("f5", "replace", "replace", "Replace", "Find and replace", True),
     Control("escape", "cancel", "cancel", "Exit / cancel", "Files and session", True),
     Control("ctrl+n", "new", None, "New draft", "Files and session"),
     Control("ctrl+o", "open", None, "Open file", "Files and session"),
@@ -107,6 +107,7 @@ def cheatsheet(mode: Mode, area: TextArea | None, context: str,
     groups["Current interaction"] = [
         context,
         "Search: Enter finds next; Tab moves among inputs and actions.",
+        r"Regex: toggle OFF/ON beside Find; ON uses Python patterns and replacement captures \g<1> or \g<name>.",
         "Dialogs: Tab moves focus; Enter activates; Escape dismisses.",
         "Help: Up/Down or PageUp/PageDown scroll; Escape or F1 closes help.",
     ]

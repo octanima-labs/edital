@@ -74,7 +74,6 @@ class EditorApp(App[EditResult]):
     #title { height: 1; padding: 0 1; background: $primary; }
     TextArea { height: 1fr; }
     #diagnostic { height: auto; max-height: 8; padding: 0 1; color: $error; }
-    #find { height: 3; }
     """
     BINDINGS: ClassVar[list[BindingType]] = bindings("embedded")
 
