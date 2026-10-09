@@ -1,0 +1,8 @@
+# Periodic autosave interval in milliseconds; zero disables autosave.
+auto_save: 0
+# Preserve unsaved documents on orderly exit.
+cache: true
+# Confirm before discarding modified content without caching.
+prompt: true
+# Restore recovery snapshots at editing startup; --recover enables this per launch.
+auto_restore: false

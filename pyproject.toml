@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "edital"
 version = "0.1.0"
-description = "Project description"
+description = "Reusable transactional terminal text editor built on Textual"
 readme = "README.md"
 license = "MIT"
 authors = [
@@ -23,13 +23,18 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-  "2ning",
+  "textual>=8.0,<9",
+  "platformdirs>=4,<5",
+  "PyYAML>=6,<7",
 ]
 
+[project.scripts]
+edital = "edital.cli:main"
+
 [project.urls]
-Repository = "REPO_URL"
-Documentation = "DOCS_URL"
-Issues = "ISSUES_URL"
+Repository = "https://github.com/octanima-labs/edital"
+Documentation = "https://octanima-labs.github.io/edital"
+Issues = "https://github.com/octanima-labs/confease/issues"
 
 [dependency-groups]
 dev = [
@@ -51,12 +56,9 @@ target-version = "py311"
 [tool.mypy]
 python_version = "3.11"
 
-[[tool.mypy.overrides]]
-module = ["tuning"]
-ignore_missing_imports = true
-
 [tool.hatch.envs.default]
 dependencies = [
+  "types-PyYAML",
   "build",
   "mypy",
   "pytest",
