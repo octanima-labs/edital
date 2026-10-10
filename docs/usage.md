@@ -179,12 +179,12 @@ not idle delays: dirty eligible files are saved even during continuous typing.
 Only successful initial disk loads or explicit saves confer eligibility. Named
 and unnamed drafts are skipped until explicitly saved, even if another process
 creates the destination meanwhile. A failed autosave leaves dirty content intact.
-**Escape only preserves or discards changes since the most recent successful
+**Exiting only preserves or discards changes since the most recent successful
 save; it cannot revert changes already written by autosave.**
 
 ### Recovery lifecycle
 
-Escape caches unsaved documents by default, including drafts and unsaved edits to
+Ctrl+Q exits and caches unsaved documents by default, including drafts and unsaved edits to
 disk-backed documents. Ctrl+W closes only the current tab and never caches it.
 Snapshots persist until restored and resolved, saved, discarded,
 replaced by a newer snapshot, or purged. Restoring does not immediately consume a
@@ -240,7 +240,14 @@ remains an unprompted headless API with no force parameter; confirmation is CLI-
 | F8 | Open the scrollable session-document picker |
 | Ctrl+PageDown / Ctrl+PageUp | Next / previous tab |
 | Ctrl+Shift+PageUp / Ctrl+Shift+PageDown | Move active tab left / right |
-| Escape | Dismiss active interaction; otherwise exit using configured caching |
+| Escape | Dismiss active interaction; otherwise do nothing |
+| Ctrl+Q | Exit using configured caching; confirm discard when required |
+
+Ctrl+Q also exits from Find/Replace, but is blocked while a dialog, document
+picker, or help is open. Escape dismisses the topmost interaction only; pressing
+it repeatedly cannot exit the session. A declined exit confirmation preserves
+the prior interaction and focus. If caching fails, a diagnostic is shown and
+the session stays open for retry. Ctrl+Q exits an empty workspace too.
 
 Tabs preserve text, cursor, selection, and undo history. Dirty tabs show **⏺**
 before the name, and unresolved recovery conflicts independently show **▲**;
@@ -304,7 +311,8 @@ if result.outcome == "accepted":
 ```
 
 The session is blocking. **F2** or **F3** validates and accepts the text, then closes the UI.
-**Esc** cancels, asking for confirmation when the text has changed. Cancellation
+**Ctrl+Q** cancels, asking for confirmation when the text has changed. **Esc** only
+dismisses the current interaction and otherwise does nothing. Cancellation
 does not accept or save edited text. An unchanged buffer and an empty buffer can
 both be accepted explicitly.
 
@@ -340,13 +348,19 @@ configuration, write destination files, autosave, or create recovery snapshots.
 | F2 / F3 | Validate, accept the sole document, and close; no file is written |
 | F4 | Open Find; Enter selects the next occurrence, wrapping to the start |
 | F5 | Open Find/Replace |
-| Esc | Dismiss interaction first; otherwise cancel |
+| Esc | Dismiss active interaction; otherwise do nothing |
+| Ctrl+Q | Cancel session; confirm discard if changed |
 | Ctrl-Z / Ctrl-Y | Undo / redo |
 | Shift + arrows | Select text |
 | F6 | Select line |
 | F7 | Select all |
 
-Embedded F3 is now acceptance, not Find: use F4 in both modes. File/tab-only keys
+Ctrl+Q can cancel from Find/Replace. Declining or dismissing discard confirmation
+preserves the buffer, search inputs, and prior focus. Ctrl+Q is blocked while
+help or confirmation is open; dismiss the topmost interaction with Escape first.
+
+Escape no longer ends either editor; use Ctrl+Q. Embedded F3 is now acceptance,
+not Find: use F4 in both modes. File/tab-only keys
 (F8, Ctrl+S/N/O/W and modified PageUp/PageDown tab actions) are unavailable in embedded
 document editing and are not repurposed. Ctrl+S does not accept or close. Ctrl+W
 does not delete text; use Ctrl+Backspace or Alt+Backspace for previous-word deletion.

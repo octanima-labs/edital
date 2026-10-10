@@ -29,7 +29,9 @@ def test_tabs_retain_state_and_empty_workspace(tmp_path):
             await pilot.press("ctrl+w", "ctrl+w")
             assert not editor.files and not editor.exited
             assert app.query_one("#empty").display
-            await pilot.press("escape")
+            await pilot.press("escape", "escape")
+            assert app.is_running and not editor.exited
+            await pilot.press("ctrl+q")
         assert editor.exited
     asyncio.run(exercise())
 
@@ -54,7 +56,7 @@ def test_save_as_cancel_save_close_and_find(tmp_path):
             await pilot.press("enter")
             assert not editor.files and not editor.exited
             assert (tmp_path / "saved").read_text() == "hi"
-            await pilot.press("escape")
+            await pilot.press("ctrl+q")
     asyncio.run(exercise())
 
 
@@ -84,7 +86,7 @@ def test_periodic_autosave_and_reschedule(tmp_path):
             await pilot.press("ctrl+pagedown", "d")
             await pilot.pause(0.1)
             assert draft.modified and not draft.path.exists()
-            await pilot.press("escape")
+            await pilot.press("ctrl+q")
         assert len(editor.cache) == 1
     asyncio.run(exercise())
 
@@ -98,10 +100,10 @@ def test_discard_refusal_and_no_prompt():
             await pilot.press("x", "ctrl+w")
             await pilot.click("#keep")
             assert draft in editor.files
-            await pilot.press("escape", "escape")
+            await pilot.press("ctrl+q", "escape")
             assert not editor.exited
             editor.conf.set("prompt", False)
-            await pilot.press("escape")
+            await pilot.press("ctrl+q")
         assert editor.exited and not editor.cache
     asyncio.run(exercise())
 
@@ -123,10 +125,14 @@ def test_failed_save_all_and_cache_exit(tmp_path, monkeypatch):
                 raise OSError("cache unavailable")
 
             monkeypatch.setattr(editor._recovery, "snapshot", fail)
-            await pilot.press("escape")
+            await pilot.press("f5")
+            field = app.query_one("#find", Input)
+            field.value = "two"
+            await pilot.press("ctrl+q")
             assert not editor.exited and editor.files
+            assert app.focused is field and field.value == "two"
             monkeypatch.setattr(editor._recovery, "snapshot", snapshot)
-            await pilot.press("escape")
+            await pilot.press("ctrl+q")
         assert len(editor.cache) == 1
     asyncio.run(exercise())
 
@@ -150,7 +156,7 @@ def test_recovery_with_running_timer(tmp_path):
             await pilot.click("#recovered")
             await pilot.pause(0.15)
             assert not recovered.conflict and path.read_text() == "recovery"
-            await pilot.press("escape")
+            await pilot.press("ctrl+q")
     asyncio.run(exercise())
 
 
@@ -174,5 +180,5 @@ def test_open_labels_and_save_all_cancel(tmp_path):
             assert isinstance(app.screen, PathDialog)
             await pilot.press("escape")
             assert not editor.exited and len(editor.files) == 3
-            await pilot.press("escape")
+            await pilot.press("ctrl+q")
     asyncio.run(exercise())

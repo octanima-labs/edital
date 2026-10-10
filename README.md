@@ -48,7 +48,8 @@ unnamed draft. Missing paths open named drafts, without creating
 files until an explicit save. **F2** saves and closes the current tab, **F3** saves
 all and exits, **F4** opens Find, and **F5** opens Find/Replace. **F1** opens a
 scrollable cheatsheet with all bindings, including editing shortcuts hidden from
-the footer. **Escape** dismisses help, dialogs, or search first, then exits.
+the footer. **Escape** dismisses help, dialogs, or search and does nothing during
+ordinary editing. **Ctrl+Q** exits using configured caching and discard rules.
 Ctrl+S saves, Ctrl+W closes a tab without caching, Ctrl+N creates a draft,
 Ctrl+O opens a file, and Ctrl+PageUp/PageDown switches tabs.
 **Ctrl+Shift+PageUp/PageDown** moves the active tab left/right without wrapping or
@@ -85,7 +86,7 @@ requires confirmation. Enable recovery for one launch with `--recover`, or set
 `auto_restore: true` to restore at every editing startup. `--no-cache` suppresses
 both restoration and caching. Recovery covers orderly exit, not crashes.
 Autosave only applies to files loaded from disk or explicitly
-saved. **Escape does not undo content already autosaved.**
+saved. **Exiting or discarding does not undo content already autosaved.**
 
 Recovery conflicts offer **Restore cached version**, **Discard cached version**,
 or **Keep cached version as separate draft**, with explanations for each choice.
@@ -177,13 +178,18 @@ Import these APIs directly from `edital`.
 | **F3** | Save all and exit standalone; validate and accept the sole embedded document. |
 | **F4** | Find text; Enter selects the next occurrence, wrapping to the start. |
 | **F5** | Find/Replace, including Replace all in the current document. |
-| **Esc** | Dismiss the active interaction; otherwise exit standalone or cancel embedded. |
+| **Esc** | Dismiss the active interaction; otherwise do nothing. |
+| **Ctrl+Q** | Exit standalone using cache settings; cancel embedded, confirming discard if changed. |
 | **Ctrl-Z / Ctrl-Y** | Undo / redo. |
 | **Shift + arrows** | Select text. |
 | **F6** | Select line. |
 | **F7** | Select all. |
 
-**Compatibility note:** embedded Find moved from F3 to F4. F3 now accepts text
+Ctrl+Q is available while Find/Replace is open, but blocked by help, the document
+picker, and confirmation/path/recovery dialogs. Dismiss those with Escape first.
+
+**Compatibility note:** Escape no longer exits or cancels either editor; use
+Ctrl+Q. Embedded Find moved from F3 to F4. F3 now accepts text
 after validation, just like F2. Embedded Ctrl+S is unavailable and does not accept
 or close; Ctrl+W is reserved and no longer deletes a word. File/tab actions remain
 standalone-only. Use Ctrl+Backspace or Alt+Backspace to delete the previous word

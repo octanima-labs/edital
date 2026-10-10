@@ -376,7 +376,7 @@ def test_embedded_regex_replacement_respects_validation_and_cancel(accept, user_
                 panel.replace_all()
                 await pilot.press("escape", "f3")
             else:
-                await pilot.press("escape", "tab", "enter")
+                await pilot.press("ctrl+q", "tab", "enter")
         assert app.return_value == (EditResult("accepted", "good") if accept else EditResult("cancelled"))
         assert not user_storage[0].exists() and not user_storage[1].exists()
     asyncio.run(exercise())

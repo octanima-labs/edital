@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** Escape only dismisses the current interaction and no longer exits
+  standalone editing or cancels embedded editing. Use Ctrl+Q for explicit exit or
+  cancellation, with existing caching/discard rules and modal isolation. Footer
+  and help now expose the mode-specific Ctrl+Q action.
+
 ### Added
 
 - Standalone F8 Documents picker with scrollable session-order rows, tentative

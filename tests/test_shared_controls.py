@@ -134,7 +134,8 @@ def test_help_effective_bindings_and_search_focus(mode):
             assert "f6: Select line" in help_text and "f7: Select all" in help_text
             assert "ctrl+w: Close tab" in help_text
             assert "ctrl+w: Delete" not in help_text
-            assert "ctrl+q: Quit" in help_text and "ctrl+p:" in help_text
+            assert f"ctrl+q: {'Cancel session' if mode == 'embedded' else 'Exit using cache settings'}" in help_text
+            assert "escape: Dismiss interaction" in help_text and "ctrl+p:" in help_text
             if mode == "embedded":
                 assert "unavailable in embedded" in help_text
             await pilot.press("f2", "f3", "f4", "f5", "ctrl+w", "ctrl+shift+pageup", "ctrl+q", "ctrl+p")

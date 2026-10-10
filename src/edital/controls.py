@@ -32,7 +32,8 @@ CONTROLS = (
     Control("f4", "find", "find", "Find", "Find and replace", True),
     Control("f5", "replace", "replace", "Replace", "Find and replace", True),
     Control("f8", "documents", None, "Documents", "Tabs"),
-    Control("escape", "cancel", "cancel", "Exit / cancel", "Files and session", True),
+    Control("escape", "cancel", "cancel", "Dismiss interaction", "Files and session"),
+    Control("ctrl+q", "quit", "quit", "Exit / cancel session", "Files and session", True),
     Control("ctrl+n", "new", None, "New draft", "Files and session"),
     Control("ctrl+o", "open", None, "Open file", "Files and session"),
     Control("ctrl+s", "save", None, "Save without closing", "Files and session"),
@@ -53,7 +54,7 @@ def bindings(mode: Mode) -> list[BindingType]:
             description = control.description
             if control.key == "f2":
                 description = "Save & close" if mode == "standalone" else "Accept & close"
-            elif control.key == "escape":
+            elif control.key == "ctrl+q":
                 description = "Exit" if mode == "standalone" else "Cancel"
             result.append(Binding(control.key, action, description, show=control.show, priority=True))
     return result
@@ -81,10 +82,10 @@ def cheatsheet(mode: Mode, area: TextArea | None, context: str,
                 description += " — unavailable in embedded editing"
             elif control.key in ("f2", "f3"):
                 description = "Validate, accept text, and close (no file write)"
-            elif control.key == "escape":
-                description = "Dismiss interaction first; otherwise cancel"
-        elif control.key == "escape":
-            description = "Dismiss interaction first; otherwise exit using cache settings"
+            elif control.key == "ctrl+q":
+                description = "Cancel session; confirm discard if changed (blocked in dialogs)"
+        elif control.key == "ctrl+q":
+            description = "Exit using cache settings; confirm discard when required (blocked in dialogs)"
         groups.setdefault(control.group, []).append(f"{control.key}: {description}")
     # Include inherited controls, even in an empty standalone workspace.
     document_bindings = area._bindings if area is not None else BindingsMap(TextArea.BINDINGS)

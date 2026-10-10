@@ -440,12 +440,16 @@ class FileEditorApp(App[None]):
         elif self.query_one(SearchPanel).display:
             self.query_one(SearchPanel).close()
             self.select_active()
-        else:
+
+    async def action_quit(self) -> None:
+        """Request a deliberate exit through persistence and discard rules."""
+        if self.can_interact():
             self.request_exit()
 
     @work(group="commands")
     async def request_exit(self) -> None:
-        await self._remove_documents(exiting=True)
+        if self.can_interact():
+            await self._remove_documents(exiting=True, focus=False)
 
     def _switch(self, offset: int) -> None:
         if self.can_interact() and self.editor.files:
@@ -550,6 +554,8 @@ class FileEditorApp(App[None]):
             self.push_screen(HelpDialog(cheatsheet("standalone", area, type(self.screen).__name__, self._bindings)))
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if action == "quit" and not self.can_interact():
+            return False
         if ((isinstance(self.screen, HelpDialog) or self.document_picker is not None)
                 and action in ("quit", "command_palette")):
             return False

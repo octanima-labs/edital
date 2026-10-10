@@ -10,7 +10,7 @@ import pytest
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Native Linux PTY verification")
 @pytest.mark.parametrize("scenario", ["save", "failures", "controls", "dialogs", "recovery",
-                                     "picker", "picker-narrow"])
+                                     "picker", "picker-narrow", "embedded-quit"])
 def test_real_terminal(tmp_path, scenario):
     import fcntl
     import pty
@@ -41,7 +41,7 @@ def test_real_terminal(tmp_path, scenario):
             "(attempts.append(True), (_ for _ in ()).throw(OSError('cache failure'))); "
             "editor.run(); print('TERMINAL_DONE', editor.exited)"
         )
-        actions = [(b"x", 0.2), (b"\x1bOR", 0.4), (b"\x1b", 0.4), (b"\x1b", 0.4)]
+        actions = [(b"x", 0.2), (b"\x1bOR", 0.4), (b"\x11", 0.4), (b"\x11", 0.4)]
     elif scenario == "controls":
         source += (
             "from edital.search import SearchPanel; "
@@ -80,7 +80,7 @@ def test_real_terminal(tmp_path, scenario):
         source += "editor.new().text='draft'; editor.run(); print('TERMINAL_DONE', editor.exited)"
         actions = [(b"\x13", 0.3), (str(tmp_path / "missing/file").encode(), 0.2),
                    (b"\r", 0.3), (b"\x1bOP", 0.3), (b"\x1b[6~", 0.2),
-                   (b"\x1b", 0.3), (b"\x1b", 0.3), (b"\x1b", 0.4)]
+                   (b"\x1b", 0.3), (b"\x1b", 0.3), (b"\x11", 0.4)]
     elif scenario == "recovery":
         source = (
             "from edital import Edital; from pathlib import Path; "
@@ -89,7 +89,15 @@ def test_real_terminal(tmp_path, scenario):
             "editor.run(); print('TERMINAL_DONE',editor.exited)"
         )
         actions = [(b"\x1bOP", 0.3), (b"\x1b", 0.3), (b"\t\t", 0.3),
-                   (b"\x1b", 0.3), (b"\x1b", 0.4)]
+                   (b"\x1b", 0.3), (b"\x11", 0.4)]
+    elif scenario == "embedded-quit":
+        source = (
+            "from edital.app import EditorApp; "
+            "result=EditorApp('seed').run(); print('TERMINAL_DONE',result.outcome=='cancelled')"
+        )
+        # Escape leaves editing open; Ctrl+Q confirms, Escape declines, then explicit discard cancels.
+        actions = [(b"x", 0.2), (b"\x1b", 0.3), (b"\x11", 0.3),
+                   (b"\x11", 0.2), (b"\x1b", 0.3), (b"\x11", 0.3), (b"\t\r", 0.4)]
     else:
         source += "editor.run(); print('TERMINAL_DONE', editor.exited)"
         # Ctrl+PageUp selects first; F2 saves/closes it; F3 saves remaining and exits.
@@ -149,6 +157,10 @@ def test_real_terminal(tmp_path, scenario):
             assert not first.exists()
             assert b"Destination is missing" in transcript
             assert list((tmp_path / "state/edital/recovery").glob("*.json"))
+        elif scenario == "embedded-quit":
+            assert b"Discard" in transcript
+            assert first.read_text() == "first" and second.read_text() == "second"
+            assert not (tmp_path / "config").exists() and not (tmp_path / "state").exists()
     finally:
         if process.poll() is None:
             process.kill()

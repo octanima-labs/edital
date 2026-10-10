@@ -43,11 +43,11 @@ def test_discard_refusal_and_confirmation():
     async def exercise():
         app = EditorApp("seed")
         async with app.run_test() as pilot:
-            await pilot.press("x", "escape")
+            await pilot.press("x", "ctrl+q")
             assert isinstance(app.screen, DiscardDialog)
             await pilot.click("#keep")
             assert app.query_one(TextArea).text == "xseed"
-            await pilot.press("escape")
+            await pilot.press("ctrl+q")
             await pilot.click("#discard")
         assert app.return_value == EditResult("cancelled")
     asyncio.run(exercise())
@@ -85,7 +85,9 @@ def test_cancel_unchanged():
     async def exercise():
         app = EditorApp("seed")
         async with app.run_test() as pilot:
-            await pilot.press("escape")
+            await pilot.press("escape", "escape")
+            assert app.is_running and app.return_value is None
+            await pilot.press("ctrl+q")
         assert app.return_value == EditResult("cancelled")
     asyncio.run(exercise())
 

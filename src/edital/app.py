@@ -128,16 +128,25 @@ class EditorApp(App[EditResult]):
         search = self.query_one(SearchPanel)
         if search.display:
             search.close()
-        elif self.candidate != self.initial_text:
-            self.push_screen(DiscardDialog(), self._discard_answer)
-        else:
-            self.exit(EditResult("cancelled"))
 
-    def _discard_answer(self, discard: bool | None) -> None:
-        if discard:
-            self.exit(EditResult("cancelled"))
+    async def action_quit(self) -> None:
+        """Explicitly cancel, retaining transactional discard confirmation."""
+        if isinstance(self.screen, ModalScreen):
+            return
+        if self.candidate != self.initial_text:
+            origin = self.focused
+
+            def discard_answer(discard: bool | None) -> None:
+                if discard:
+                    self.exit(EditResult("cancelled"))
+                elif origin is not None and origin.is_mounted:
+                    origin.focus()
+                else:
+                    self.query_one(TextArea).focus()
+
+            self.push_screen(DiscardDialog(), discard_answer)
         else:
-            self.query_one(TextArea).focus()
+            self.exit(EditResult("cancelled"))
 
     def action_find(self) -> None:
         if isinstance(self.screen, ModalScreen):
@@ -156,6 +165,8 @@ class EditorApp(App[EditResult]):
             self.push_screen(HelpDialog(cheatsheet("embedded", area, type(self.screen).__name__, self._bindings)))
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if action == "quit" and isinstance(self.screen, ModalScreen):
+            return False
         if isinstance(self.screen, HelpDialog) and action in ("quit", "command_palette"):
             return False
         return super().check_action(action, parameters)

@@ -69,15 +69,15 @@ def test_embedded_compact_discard_preserves_state_and_no_config(user_storage, wi
             await pilot.press("x", "shift+right")
             area = app.query_one(TextArea)
             selection, history = area.selection, list(area.history.undo_stack)
-            await pilot.press("escape")
+            await pilot.press("ctrl+q")
             assert isinstance(app.screen, DiscardDialog)
             assert_actions_fit(app.screen, "#discard-dialog", width == 24)
             await pilot.press("enter")
             assert area.text == "xseed" and area.selection == selection
             assert area.history.undo_stack == history
-            await pilot.press("escape", "escape")
+            await pilot.press("ctrl+q", "escape")
             assert area.text == "xseed"
-            await pilot.press("escape")
+            await pilot.press("ctrl+q")
             await pilot.click("#discard")
         assert app.return_value == EditResult("cancelled")
         assert not user_storage[0].exists()
@@ -88,7 +88,7 @@ def test_prompt_actions_reflow_after_resize():
     async def exercise():
         app = EditorApp("seed")
         async with app.run_test() as pilot:
-            await pilot.press("x", "escape")
+            await pilot.press("x", "ctrl+q")
             assert_actions_fit(app.screen, "#discard-dialog", False)
             await pilot.resize_terminal(24, 18)
             assert_actions_fit(app.screen, "#discard-dialog", True)
