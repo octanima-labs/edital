@@ -158,6 +158,9 @@ class EditalSession:
             document: Open handle or destination path.
             path: Optional replacement destination, required for unnamed drafts.
 
+        Returns:
+            None.
+
         Raises:
             ValueError: If the document is not open, has a recovery conflict,
                 lacks a destination, targets another open document, or has

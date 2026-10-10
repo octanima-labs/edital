@@ -97,6 +97,9 @@ class Edital:
             path: Optional new destination; required for an unnamed draft.
                 An existing destination's contents are replaced.
 
+        Returns:
+            None.
+
         Raises:
             ValueError: If the document is not open, has an unresolved conflict,
                 lacks a destination, targets another open document, or contains
