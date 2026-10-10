@@ -9,7 +9,8 @@ import pytest
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Native Linux PTY verification")
-@pytest.mark.parametrize("scenario", ["save", "failures", "controls", "dialogs", "recovery"])
+@pytest.mark.parametrize("scenario", ["save", "failures", "controls", "dialogs", "recovery",
+                                     "picker", "picker-narrow"])
 def test_real_terminal(tmp_path, scenario):
     import fcntl
     import pty
@@ -18,7 +19,7 @@ def test_real_terminal(tmp_path, scenario):
     import termios
 
     master, slave = pty.openpty()
-    width = 32 if scenario in ("dialogs", "recovery") else 110
+    width = 32 if scenario in ("dialogs", "recovery", "picker-narrow") else 110
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 30, width, 0, 0))
     before = termios.tcgetattr(slave)
     environment = os.environ.copy()
@@ -58,6 +59,23 @@ def test_real_terminal(tmp_path, scenario):
                    (b"\x1b", 0.3), (b"\x1a", 0.3), (b"\x1bOP", 0.3),
                    (b"\x1b[6~", 0.2), (b"\x1b", 0.3), (b"\x1b[5;6~", 0.3),
                    (b"\x1bOR", 0.4)]
+    elif scenario in ("picker", "picker-narrow"):
+        source += (
+            "from edital.document_picker import DocumentPicker; "
+            "move=editor.session.move; moves=[]; "
+            "editor.session.move=lambda doc,index: "
+            "(moves.append((doc.path.name,index,editor.session.active.path.name)),move(doc,index)); "
+            "choose=DocumentPicker.action_choose; choices=[]; "
+            "DocumentPicker.action_choose=lambda panel: "
+            "(choices.append((panel.session.active.path.name, "
+            "next(doc.path.name for doc in panel.session.files if doc.id==panel.highlighted_id))),choose(panel)); "
+            "editor.run(); print('TERMINAL_DONE',editor.exited,moves,choices)"
+        )
+        # F8, highlight the inactive first document, reorder it, activate it,
+        # reopen/browse/cancel, then type and save to verify activation/focus.
+        actions = [(b"\x1b[19~", 0.4), (b"\x1b[A", 0.2), (b"\x1b[6;6~", 0.4),
+                   (b"\r", 0.3), (b"\x1b[19~", 0.3), (b"\x1b[A", 0.2),
+                   (b"\x1b", 0.3), (b"x", 0.2), (b"\x1bOR", 0.4)]
     elif scenario == "dialogs":
         source += "editor.new().text='draft'; editor.run(); print('TERMINAL_DONE', editor.exited)"
         actions = [(b"\x13", 0.3), (str(tmp_path / "missing/file").encode(), 0.2),
@@ -118,6 +136,11 @@ def test_real_terminal(tmp_path, scenario):
             assert first.read_text() == "first" and second.read_text() == "second"
             assert b"('two', 0)" in transcript
             assert b"Keyboard cheatsheet" in transcript
+        elif scenario in ("picker", "picker-narrow"):
+            assert b"Open documents" in transcript
+            assert b"('one', 1, 'two')" in transcript, bytes(transcript)[-1000:]
+            assert b"('two', 'one')" in transcript, bytes(transcript)[-1000:]
+            assert first.read_text() == "xfirst" and second.read_text() == "second"
         elif scenario == "dialogs":
             assert not (tmp_path / "missing/file").exists()
             assert b"Keyboard cheatsheet" in transcript

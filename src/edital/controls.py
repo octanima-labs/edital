@@ -31,6 +31,7 @@ CONTROLS = (
     Control("f3", "save_exit", "accept", "Save / accept all & finish", "Files and session"),
     Control("f4", "find", "find", "Find", "Find and replace", True),
     Control("f5", "replace", "replace", "Replace", "Find and replace", True),
+    Control("f8", "documents", None, "Documents", "Tabs"),
     Control("escape", "cancel", "cancel", "Exit / cancel", "Files and session", True),
     Control("ctrl+n", "new", None, "New draft", "Files and session"),
     Control("ctrl+o", "open", None, "Open file", "Files and session"),
@@ -111,6 +112,12 @@ def cheatsheet(mode: Mode, area: TextArea | None, context: str,
         "Dialogs: Tab moves focus; Enter activates; Escape dismisses.",
         "Help: Up/Down or PageUp/PageDown scroll; Escape or F1 closes help.",
     ]
+    if mode == "standalone":
+        groups["Current interaction"].append(
+            "Documents: F8 opens; Up/Down, PageUp/PageDown, Home/End browse; Enter or name click selects; "
+            "Escape closes. Ctrl+W closes the highlighted document; click a close icon to close its document. "
+            "Ctrl+Shift+PageUp/PageDown reorders the highlighted document."
+        )
     return "Keyboard cheatsheet\n\n" + "\n\n".join(
         heading + "\n" + "\n".join(lines) for heading, lines in groups.items()
     )

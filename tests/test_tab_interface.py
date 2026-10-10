@@ -197,7 +197,10 @@ def test_focus_colors_update_open_prompts():
             underline = app.query_one("Underline")
             assert underline.get_component_styles("underline--bar").color == Color.parse("#12AB34")
             await pilot.press("f4")
-            assert app.query_one("#find", Input).styles.border_left[1] == Color.parse("#12AB34")
+            find = app.query_one("#find", Input)
+            assert app.focused is find
+            assert find.region.height == find.content_region.height == 1
+            assert find.styles.gutter.height == 0  # Compact Find keeps focus without adding a border.
             await pilot.press("escape", "ctrl+o")
             assert isinstance(app.screen, PathDialog)
             field = app.screen.query_one(Input)

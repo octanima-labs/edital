@@ -13,6 +13,7 @@ from textual.widgets import Button, Footer, Input, Static, Tabs, TextArea
 
 from .app import DialogActions, DiscardDialog
 from .controls import HelpDialog, bindings, cheatsheet
+from .document_picker import DocumentPicker
 from .documents import SessionFile
 from .editor import ConfirmationRequired, Edital
 from .search import SearchPanel
@@ -204,6 +205,13 @@ class FileEditorApp(App[None]):
 
     def diagnostic(self, message: str) -> None:
         self.screen_stack[0].query_one("#diagnostic", Static).update(message)
+        picker = self.document_picker
+        if picker is not None:
+            picker.report(message)
+
+    @property
+    def document_picker(self) -> DocumentPicker | None:
+        return next((screen for screen in self.screen_stack if isinstance(screen, DocumentPicker)), None)
 
     def sync_text(self) -> None:
         for document in self.editor.files:
@@ -228,13 +236,22 @@ class FileEditorApp(App[None]):
                 tab = tabs.get_tab(f"tab-{document.id}")
                 if isinstance(tab, DocumentTab):
                     tab.set_title(self.label(document))
-                    conflict = document.conflict and self.editor.conf.get("conflict_color") is not None
-                    draft = (not conflict and not document.autosave_eligible
-                             and self.editor.conf.get("draft_color") is not None)
-                    tab.set_class(conflict, "state-conflict")
-                    tab.set_class(draft, "state-draft")
+                    state = self.document_state(document)
+                    tab.set_class(state == "conflict", "state-conflict")
+                    tab.set_class(state == "draft", "state-draft")
+        picker = self.document_picker
+        if picker is not None and picker.is_mounted:
+            picker.refresh_titles()
 
-    async def reconcile(self) -> None:
+    def document_state(self, document: SessionFile) -> str | None:
+        """Share state-color precedence between tab headers and picker rows."""
+        if document.conflict and self.editor.conf.get("conflict_color") is not None:
+            return "conflict"
+        if not document.autosave_eligible and self.editor.conf.get("draft_color") is not None:
+            return "draft"
+        return None
+
+    async def reconcile(self, *, focus: bool = True) -> None:
         self._reconciling = True
         active = self.editor.session.active
         tabs = self.screen_stack[0].query_one("#tabs", Tabs)
@@ -256,10 +273,10 @@ class FileEditorApp(App[None]):
             tabs.reorder([d.id for d in self.editor.files])
         self.editor.session.active = active
         self.update_labels()
-        self.select_active()
+        self.select_active(focus=focus)
         self._reconciling = False
 
-    def select_active(self) -> None:
+    def select_active(self, *, focus: bool = True) -> None:
         active = self.editor.session.active
         for identity, area in self.areas.items():
             area.display = active is not None and identity == active.id
@@ -271,10 +288,12 @@ class FileEditorApp(App[None]):
             tabs.active = f"tab-{active.id}"
             if tabs.active_tab is not None:
                 self.call_after_refresh(tabs.active_tab.scroll_visible, animate=False, force=True)
-            self.areas[active.id].focus()
+            if focus and self.can_interact():
+                self.areas[active.id].focus()
 
     def on_tabs_tab_activated(self, event: Tabs.TabActivated) -> None:
-        if self._reconciling or event.tab.id != event.tabs.active or not self.is_running:
+        if (self._reconciling or event.tab.id != event.tabs.active or not self.is_running
+                or not self.can_interact()):
             return
         active = next((d for d in self.editor.files if f"tab-{d.id}" == event.tab.id), None)
         if active is not None:
@@ -371,7 +390,8 @@ class FileEditorApp(App[None]):
                 return
         await self._remove_documents(exiting=True)
 
-    async def _remove_documents(self, *, exiting: bool, document: SessionFile | None = None) -> None:
+    async def _remove_documents(self, *, exiting: bool, document: SessionFile | None = None,
+                                focus: bool = True) -> None:
         self.sync_text()
         try:
             if exiting:
@@ -394,11 +414,13 @@ class FileEditorApp(App[None]):
         except (OSError, ValueError) as error:
             self.diagnostic(str(error))
         if not self.editor.exited:
-            await self.reconcile()
+            await self.reconcile(focus=focus)
 
     @work(group="commands")
     async def action_close(self) -> None:
-        if self.can_interact():
+        if isinstance(self.screen, DocumentPicker):
+            self.screen.request_close(self.screen.highlighted_id)
+        elif self.can_interact():
             await self._remove_documents(exiting=False, document=self.editor.session.active)
 
     @work(group="commands")
@@ -411,6 +433,8 @@ class FileEditorApp(App[None]):
     def action_cancel(self) -> None:
         if isinstance(self.screen, DiscardDialog):
             self.screen.dismiss(False)
+        elif isinstance(self.screen, DocumentPicker) and self.screen.busy:
+            return
         elif isinstance(self.screen, ModalScreen):
             self.screen.dismiss(None)
         elif self.query_one(SearchPanel).display:
@@ -438,6 +462,23 @@ class FileEditorApp(App[None]):
         self._switch(-1)
 
     async def _move(self, offset: int) -> None:
+        if isinstance(self.screen, DocumentPicker):
+            picker = self.screen
+            if picker.busy:
+                return
+            document = next((d for d in self.editor.files if d.id == picker.highlighted_id), None)
+            if document is None:
+                return
+            target = self.editor.files.index(document) + offset
+            if 0 <= target < len(self.editor.files):
+                picker.busy = True
+                try:
+                    self.editor.session.move(document, target)
+                    await self.reconcile(focus=False)
+                    await picker.reconcile_rows()
+                finally:
+                    picker.busy = False
+            return
         current = self.editor.session.active
         if not self.can_interact() or current is None:
             return
@@ -453,6 +494,44 @@ class FileEditorApp(App[None]):
     @work(group="commands")
     async def action_move_right(self) -> None:
         await self._move(1)
+
+    def action_documents(self) -> None:
+        if not self.can_interact() or not self.editor.files:
+            return
+        self.sync_text()
+        origin = self.focused
+
+        def chosen(identity: str | None) -> None:
+            document = next((d for d in self.editor.files if d.id == identity), None)
+            if document is not None:
+                self.editor.session.active = document
+                self.select_active()
+            elif not self.editor.files:
+                self.screen_stack[0].query_one(SearchPanel).close()
+                self.screen_stack[0].set_focus(None)
+            elif origin is not None and origin.is_mounted and origin.display:
+                origin.focus()
+            else:
+                self.select_active()
+
+        self.push_screen(DocumentPicker(self.editor.session, self.label, self.document_state), chosen)
+
+    @work(group="commands")
+    async def on_document_picker_close_requested(self, event: DocumentPicker.CloseRequested) -> None:
+        event.stop()
+        picker = event.picker
+        if self.screen is not picker or picker.busy:
+            return
+        document = next((d for d in self.editor.files if d.id == event.document_id), None)
+        if document is None:
+            return
+        picker.busy = True
+        picker.report("")
+        try:
+            await self._remove_documents(exiting=False, document=document, focus=False)
+            await picker.reconcile_rows()
+        finally:
+            picker.busy = False
 
     def action_find(self) -> None:
         if self.can_interact() and self.editor.session.active is not None:
@@ -471,6 +550,7 @@ class FileEditorApp(App[None]):
             self.push_screen(HelpDialog(cheatsheet("standalone", area, type(self.screen).__name__, self._bindings)))
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
-        if isinstance(self.screen, HelpDialog) and action in ("quit", "command_palette"):
+        if ((isinstance(self.screen, HelpDialog) or self.document_picker is not None)
+                and action in ("quit", "command_palette")):
             return False
         return super().check_action(action, parameters)

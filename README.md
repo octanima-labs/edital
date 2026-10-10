@@ -54,6 +54,15 @@ Ctrl+O opens a file, and Ctrl+PageUp/PageDown switches tabs.
 **Ctrl+Shift+PageUp/PageDown** moves the active tab left/right without wrapping or
 losing its cursor, selection, or undo history. Mouse dragging is deferred.
 
+**F8 Documents** opens a floating, scrollable list of the session's tabs. Use
+Up/Down, PageUp/PageDown, or Home/End to browse; Enter or a name click selects the
+document and closes the list. Escape returns to your previous interaction.
+Within the list, **Ctrl+Shift+PageUp/PageDown** reorders the highlighted document
+without switching the editor. **Ctrl+W** closes the highlighted document; clicking
+a row's **⨯** closes that row, both with the usual discard
+confirmation. Reordering and closing take effect immediately and survive Escape.
+The list retains tab titles, dirty/conflict symbols, and state colors.
+
 Find/Replace defaults to literal, case-sensitive text in the current document.
 The **Regex: OFF/ON** button beside Find enables Python regular expressions and
 replacement captures: find `(\w+),\s*(\w+)` and replace with `\g<2> \g<1>` to turn

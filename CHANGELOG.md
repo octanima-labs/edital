@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- Standalone F8 Documents picker with scrollable session-order rows, tentative
+  keyboard browsing, direct activation, Ctrl+W highlighted close with confirmation,
+  independent close controls, state
+  markers/colors, and highlighted-document reordering with preserved editor state.
 - Regex OFF/ON toggle in Find/Replace for both editors, with Python patterns,
   numbered/named replacement captures, zero-width navigation and insertion,
   inline validation errors, and atomic undoable Replace all.

@@ -237,6 +237,7 @@ remains an unprompted headless API with no force parameter; confirmation is CLI-
 | F4 | Find in current document |
 | F5 | Find/Replace in current document |
 | F6 / F7 | Select line / all |
+| F8 | Open the scrollable session-document picker |
 | Ctrl+PageDown / Ctrl+PageUp | Next / previous tab |
 | Ctrl+Shift+PageUp / Ctrl+Shift+PageDown | Move active tab left / right |
 | Escape | Dismiss active interaction; otherwise exit using configured caching |
@@ -249,6 +250,38 @@ Unnamed labels are `draft`, `draft (1)`, etc., without renumbering after a close
 Same-named files show disambiguated paths.
 Moving tabs stops at the ends without wrapping, preserves editing state and stable
 draft labels, and keeps the active tab visible. Mouse drag-to-reorder is deferred.
+
+### Session-document picker
+
+Press **F8** to see all open documents in a floating list in tab order. The active
+document is initially highlighted and scrolled into view. Up/Down changes the
+highlight without switching the editor and stops at the ends. PageUp/PageDown
+moves by a visible page; Home/End jumps to the first/last document. Enter or a
+left-click on a name activates that document, closes the picker, and focuses its
+editor. Escape dismisses the picker and restores your previous focus, including
+an open Find/Replace input. Text, cursor, selection, and undo history are retained.
+
+Rows show the same disambiguated names, stable draft numbering, **▲ ⏺** markers,
+and state colors as tabs. Long names are truncated to keep the close control
+visible. **Ctrl+W** closes the highlighted document; a left-click on the right-side
+**⨯** (or compatibility **X**) closes that row's document. Both use the same close
+path without activating the document or dismissing the list. Dirty/conflicted closes
+use existing no-cache confirmation settings; confirmation appears above the
+picker, and declining returns to the same highlighted document. Closing the
+highlighted document highlights its next neighbor, or the previous neighbor at
+the end. Closing the final document dismisses the picker to the empty workspace.
+Failed closes report an inline error and permit retry.
+
+**Ctrl+Shift+PageUp/PageDown** reorders the highlighted document earlier/later
+without wrapping or changing the active editor document. Tab and picker order
+update together, with the highlight following the moved document. Close and
+reorder operations are immediate: Escape does not undo them.
+
+F1 opens help above the picker. Help and discard confirmation must be dismissed
+before browsing/reordering/closing resumes; ordinary editor save/open/exit/tab-switch commands
+do not execute through the picker. Existing autosave and live color updates keep
+its state markers/colors current. F8 does nothing in an empty workspace or while
+another modal interaction is open, and is unavailable in embedded editing.
 
 Left-click a tab name to select it. Left-click its right-side **⨯** to close that
 document without caching, following the same confirmation rules as Ctrl+W.
@@ -314,7 +347,7 @@ configuration, write destination files, autosave, or create recovery snapshots.
 | F7 | Select all |
 
 Embedded F3 is now acceptance, not Find: use F4 in both modes. File/tab-only keys
-(Ctrl+S/N/O/W and modified PageUp/PageDown tab actions) are unavailable in embedded
+(F8, Ctrl+S/N/O/W and modified PageUp/PageDown tab actions) are unavailable in embedded
 document editing and are not repurposed. Ctrl+S does not accept or close. Ctrl+W
 does not delete text; use Ctrl+Backspace or Alt+Backspace for previous-word deletion.
 Ctrl+A retains line-start navigation; F7 selects all.
