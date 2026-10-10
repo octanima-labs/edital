@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "edital"
 version = "0.1.0"
-description = "Reusable transactional terminal text editor built on Textual"
+description = "Transactional and state-full terminal text editor"
 readme = "README.md"
 license = "MIT"
 authors = [
