@@ -14,6 +14,24 @@ class SessionFile:
 
     ``path`` is an optional destination; ``autosave_eligible`` records successful
     loading or saving, not merely path existence. Text uses exact LF/CRLF strings.
+
+    Attributes:
+        path: Destination, or ``None`` for an unnamed draft.
+        text: Current editable content; assigning it does not write a file.
+        baseline: Saved or loaded content used to compute ``modified``.
+        autosave_eligible: Whether a successful load or save established a file.
+        newline: Recorded line-ending convention (LF or CRLF).
+        id: Stable document identifier, independent of its path or tab position.
+        draft_name: Stable display label for an unnamed draft.
+        recovery_id: Associated snapshot identifier, if any.
+        conflict: Whether recovery requires an explicit choice before saving.
+        disk_text: Destination text observed during conflicting recovery, or
+            ``None`` when unavailable or not needed.
+
+    Notes:
+        The handle is mutable even though the session's ``files`` tuple is not.
+        Use session operations to change destinations, order, or membership;
+        direct construction does not validate text or normalize paths.
     """
 
     path: Path | None = None
@@ -47,7 +65,12 @@ Document = SessionFile | str | Path
 
 
 class EditalSession:
-    """Ordered documents with active selection and headless save operations."""
+    """Ordered documents with active selection and headless save operations.
+
+    This lower-level API does not load user configuration, preserve recovery
+    snapshots, or confirm discards. Use :class:`edital.Edital` for those policies.
+    ``active`` is the selected handle, or ``None`` in an empty session.
+    """
 
     def __init__(self) -> None:
         self._files: list[SessionFile] = []
@@ -98,7 +121,24 @@ class EditalSession:
         return self.add(SessionFile(draft_name=self.draft_name()))
 
     def open(self, *paths: str | Path) -> tuple[SessionFile, ...]:
-        """Load existing UTF-8 documents or prepare named drafts for missing paths."""
+        """Load existing UTF-8 documents or prepare named drafts for missing paths.
+
+        Args:
+            *paths: Destinations expanded and resolved against the working
+                directory. Existing aliases reuse the same open handle.
+
+        Returns:
+            Handles in argument order; the final handle becomes active.
+
+        Raises:
+            OSError: If an existing destination cannot be read.
+            UnicodeError: If its content is not valid UTF-8.
+            ValueError: If line endings are mixed or contain bare CR separators.
+
+        Notes:
+            Missing destinations are not created. Earlier opens remain attached
+            if a later path fails.
+        """
         result = []
         for value in paths:
             path = Path(value).expanduser().resolve()
@@ -112,7 +152,24 @@ class EditalSession:
         return tuple(result)
 
     def save(self, document: Document, *, path: str | Path | None = None) -> None:
-        """Save to an explicit or existing destination; never open a UI prompt."""
+        """Save to an explicit or existing destination; never open a UI prompt.
+
+        Args:
+            document: Open handle or destination path.
+            path: Optional replacement destination, required for unnamed drafts.
+
+        Raises:
+            ValueError: If the document is not open, has a recovery conflict,
+                lacks a destination, targets another open document, or has
+                unsupported line endings.
+            OSError: If writing fails.
+            UnicodeError: If text cannot be encoded as UTF-8.
+
+        Notes:
+            Successful writing replaces destination contents, updates the path
+            and baseline, and enables autosave. It does not remove recovery
+            snapshots; the higher-level ``Edital.save`` owns that cleanup.
+        """
         current = self.resolve(document)
         if current.conflict:
             raise ValueError("Resolve the recovery conflict before saving")

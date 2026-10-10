@@ -22,13 +22,7 @@ def main(argv: Sequence[str] | None = None) -> int:
               "       %(prog)s conf [-h]\n"
               "       %(prog)s cache {list,purge} [-h]",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""commands:
-  conf          Edit user configuration; restart to apply saved changes.
-  cache list    List recovery snapshots with identifiers, paths, and byte sizes.
-  cache purge   Confirm removal of recovery snapshots; destination files unchanged.
-                Use -f/--force to skip confirmation (required without a terminal).
-
-examples:
+        epilog="""examples:
   edital notes.txt new-file.txt    Open files or new named drafts.
   edital --recover                Restore unsaved recovery snapshots.
   edital notes.txt --auto-save 2000
@@ -37,15 +31,22 @@ examples:
   edital cache list               Inspect cached unsaved work.
   edital -- conf cache            Open reserved command names as files.
 
+commands:
+  conf          Edit user configuration; restart to apply saved changes.
+  cache list    List recovery snapshots with identifiers, paths, and byte sizes.
+  cache purge   Confirm removal of recovery snapshots; destination files unchanged.
+                Use -f/--force to skip confirmation (required without a terminal).
+
 Use edital conf -h or edital cache -h for command-specific help.
 Editing options apply only to file editing, not to commands.
-Use -- before filenames named conf or cache, or beginning with a dash.""",
+Use -- before filenames named conf or cache, or beginning with a dash.
+Documentation: https://octanima-labs.github.io/edital/""",
     )
     parser.add_argument("paths", nargs="*", metavar="PATH", help="Existing files or new named drafts")
     parser.add_argument("-R", "--recover", action="store_true", help="Restore unsaved recovery snapshots")
-    parser.add_argument("--no-cache", action="store_true", help="Disable configured restoration and caching for this session")
-    parser.add_argument("--auto-save", type=int, metavar="MS", help="Periodic autosave interval; 0 disables it")
-    parser.add_argument("--no-prompt", action="store_true", help="Discard without confirmation when not caching")
+    parser.add_argument("--no-cache", action="store_true", help="Disable restoration and exit caching; retain existing snapshots")
+    parser.add_argument("--auto-save", type=int, metavar="MS", help="Autosave interval in milliseconds; 0 disables it, never-saved drafts are skipped")
+    parser.add_argument("--no-prompt", action="store_true", help="Discard uncached changes without confirmation; does not bypass cache purge confirmation")
     command = None
     if arguments and arguments[0] in ("conf", "cache"):
         command = arguments.pop(0)
@@ -64,7 +65,9 @@ examples:
   edital cache purge""",
             )
             operations = maintenance.add_subparsers(dest="operation", required=True)
-            operations.add_parser("list", help="List recovery snapshots")
+            operations.add_parser("list", help="List recovery snapshots",
+                                  description="List snapshot identifiers, paths (or draft), and UTF-8 content sizes. "
+                                              "Does not restore documents or launch the editor.")
             purge = operations.add_parser("purge", help="Confirm removal of recovery snapshots",
                                           description="Remove cached unsaved work; destination files stay unchanged.")
             purge.add_argument("-f", "--force", action="store_true",
@@ -72,7 +75,11 @@ examples:
             maintenance_options = maintenance.parse_args(arguments)
             operation = maintenance_options.operation
         else:
-            configuration = argparse.ArgumentParser(prog="edital conf", description="Edit user configuration; restart to apply")
+            configuration = argparse.ArgumentParser(
+                prog="edital conf",
+                description="Edit user configuration; restart to apply saved changes. "
+                            "Opens only the configuration file, without restoring recovery snapshots.",
+            )
             configuration.parse_args(arguments)
     else:
         options = parser.parse_intermixed_args(arguments)

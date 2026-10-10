@@ -13,7 +13,20 @@ from .session import line_ending
 
 @dataclass(frozen=True)
 class CacheFile:
-    """Recovery metadata and exact content; not an always-dirty session document."""
+    """Immutable recovery metadata and exact content, separate from open handles.
+
+    Attributes:
+        id: Snapshot identifier associated with a session document.
+        path: Original destination, or ``None`` for an unnamed draft.
+        text: Cached unsaved content.
+        baseline: Last loaded or saved content when the snapshot was taken.
+        newline: Recorded LF or CRLF convention.
+        autosave_eligible: Whether the original document had been loaded or saved.
+        timestamp: Snapshot creation time in UTC ISO 8601 form.
+        version: Snapshot format version, currently 1.
+
+    Reading a snapshot does not restore it, consume it, or write its destination.
+    """
 
     id: str
     path: Path | None

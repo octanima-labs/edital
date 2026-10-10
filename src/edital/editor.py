@@ -23,6 +23,26 @@ class Edital:
     ``auto_restore=True`` restores snapshots at ``run``, not during preparation.
     ``close`` removes one document; ``exit`` requests whole-editor termination.
     Files are UTF-8 with uniform LF/CRLF. Recovery covers orderly exit, not crashes.
+
+    Args:
+        **configuration_overrides: Validated instance settings: ``auto_save``
+            (nonnegative milliseconds), ``cache``, ``prompt``, ``auto_restore``
+            (booleans), and ``focus_color``, ``draft_color``, ``conflict_color``
+            (hexadecimal colors). The two state colors also accept ``None``.
+
+    Raises:
+        ValueError: If user YAML or an effective setting is invalid.
+        OSError: If the user configuration cannot be initialized or read.
+
+    Notes:
+        Construction creates a missing user configuration file and its parent
+        directory, but does not import Textual, restore snapshots, or launch a UI.
+
+    Examples:
+        >>> editor = Edital(auto_save=0)
+        >>> draft = editor.new()
+        >>> draft.text = "Notes\\n"
+        >>> editor.save(draft, path="notes.txt")
     """
 
     def __init__(self, **configuration_overrides: Any) -> None:
@@ -45,7 +65,24 @@ class Edital:
         return self._recovery.entries()
 
     def open(self, *paths: str | Path) -> tuple[SessionFile, ...]:
-        """Prepare existing files or named drafts and return document handles."""
+        """Load existing files or prepare named drafts without launching a UI.
+
+        Args:
+            *paths: Destinations, expanded and resolved against the working
+                directory. Existing filesystem aliases select the same document.
+
+        Returns:
+            Handles in argument order, with the last selected as active. Reopened
+            paths return existing handles; missing paths do not create files.
+
+        Raises:
+            OSError: If an existing file cannot be read.
+            UnicodeError: If file content is not valid UTF-8.
+            ValueError: If line endings are mixed or contain bare CR separators.
+
+        Notes:
+            Opening is sequential; a later failure leaves earlier documents open.
+        """
         return self.session.open(*paths)
 
     def new(self) -> SessionFile:
@@ -53,7 +90,25 @@ class Edital:
         return self.session.new()
 
     def save(self, document: Document, *, path: str | Path | None = None) -> None:
-        """Save a document and resolve its recovery entry only after success."""
+        """Write current text and remove its associated recovery snapshot.
+
+        Args:
+            document: Open handle or destination path identifying a document.
+            path: Optional new destination; required for an unnamed draft.
+                An existing destination's contents are replaced.
+
+        Raises:
+            ValueError: If the document is not open, has an unresolved conflict,
+                lacks a destination, targets another open document, or contains
+                unsupported line endings.
+            OSError: If writing the file or removing its snapshot fails.
+            UnicodeError: If text cannot be encoded as UTF-8.
+
+        Notes:
+            A successful write updates the destination, saved baseline, and
+            autosave eligibility before snapshot removal. A snapshot-removal
+            failure therefore does not undo the file write.
+        """
         current = self.session.resolve(document)
         self.session.save(current, path=path)
         if current.recovery_id is not None:
@@ -83,6 +138,16 @@ class Edital:
         Without caching, dirty headless removal raises ``ConfirmationRequired``
         when prompts are enabled. Set ``prompt=False`` for deliberate discard.
         Closing the last document does not exit the application.
+
+        Args:
+            document: Open handle or destination path.
+            cache: Preserve unsaved content in recovery before detaching it.
+                Defaults to false regardless of the configured exit policy.
+
+        Raises:
+            ConfirmationRequired: If uncached removal requires confirmation.
+            ValueError: If the document is not open.
+            OSError: If preserving or removing its snapshot fails.
         """
         current = self.session.resolve(document)
         self._check_discard((current,), cache)
@@ -90,7 +155,22 @@ class Edital:
         self.session.remove(current)
 
     def exit(self, *, cache: bool | None = None) -> None:
-        """Preserve/discard all documents, then exit; None uses configured caching."""
+        """Preserve or discard all documents, then request editor termination.
+
+        Args:
+            cache: Whether to preserve unsaved content. ``None`` uses the
+                instance's configured caching policy.
+
+        Raises:
+            ConfirmationRequired: If uncached discard requires confirmation.
+            OSError: If recovery persistence fails; documents remain attached.
+
+        Notes:
+            Snapshots are processed before any documents are detached. A later
+            failure can leave earlier snapshot changes persisted. Successful
+            exit empties the session and sets ``exited`` to true; it does not
+            revert content already written by explicit save or autosave.
+        """
         enabled = self.conf.get("cache") if cache is None else cache
         documents = self.files
         self._check_discard(documents, enabled)
@@ -109,6 +189,20 @@ class Edital:
         Conflicting documents remain blocked until ``resolve_recovery`` is called
         or the TUI collects a recovery choice. Repeated restoration, including
         automatic restoration at ``run``, is idempotent.
+
+        Returns:
+            Restored handles in snapshot order, including handles already
+            associated with those snapshots.
+
+        Raises:
+            ValueError: If a snapshot or destination has invalid content.
+            OSError: If reading recovery entries or destination files fails.
+            UnicodeError: If destination content is not valid UTF-8.
+
+        Notes:
+            Restoration is sequential, so earlier restored documents remain
+            if a later entry fails. Inspect each handle's ``conflict`` before
+            saving; automatic saving skips unresolved conflicts.
         """
         result = []
         for entry in self.cache:
@@ -203,11 +297,28 @@ class Edital:
         self._recovery.purge()
 
     def list(self, cache: bool = False) -> tuple[SessionFile | CacheFile, ...]:
-        """List session documents and optionally unopened recovery entries."""
+        """List session documents, optionally followed by all recovery entries.
+
+        Args:
+            cache: Include persisted snapshots, even when associated with an
+                already-open document. Reading does not restore or consume them.
+
+        Returns:
+            Open handles in session order, followed by snapshots when requested.
+        """
         return self.files + self.cache if cache else self.files
 
     def autosave(self) -> tuple[tuple[SessionFile, Exception], ...]:
-        """Perform one periodic tick and return per-document persistence failures."""
+        """Perform one autosave tick without scheduling a timer.
+
+        Only modified, previously loaded or saved documents without recovery
+        conflicts are eligible. A configured interval of zero disables this call.
+
+        Returns:
+            ``(document, exception)`` pairs for caught filesystem or validation
+            failures. Other eligible documents are still attempted; an empty
+            tuple means no caught failures, including when no writes are needed.
+        """
         if self.conf.get("auto_save") == 0:
             return ()
         errors = []
@@ -227,6 +338,15 @@ class Edital:
         ``create_draft`` adds a fallback only if no documents remain after restore;
         the CLI requests this, while API callers default to an empty workspace.
         Interactive terminal input and output are required.
+
+        Args:
+            create_draft: Create an unnamed draft if the workspace is empty
+                after any configured restoration.
+
+        Raises:
+            RuntimeError: If stdin or stdout is not an interactive terminal.
+            ValueError: If automatic recovery encounters invalid content.
+            OSError: If automatic recovery cannot read persisted content.
         """
         if not sys.stdin.isatty() or not sys.stdout.isatty():
             raise RuntimeError("The file editor requires interactive terminal input and output")

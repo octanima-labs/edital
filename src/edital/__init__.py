@@ -39,9 +39,12 @@ def edit_text(initial_text: str = "", *, title: str = "Text editor",
             terminates without an explicit outcome.
 
     Notes:
-        F2 saves and closes, Escape cancels (with discard confirmation for changed
-        text), and F3 opens Find. The caller is responsible for persisting accepted
-        text. There is no implicit external-editor fallback.
+        F2 or F3 validates and accepts text; Ctrl+Q cancels, with discard
+        confirmation when text has changed. Escape dismisses the active
+        interaction and otherwise does nothing. F4 opens Find and F5 opens
+        Find/Replace. The caller is responsible for persisting accepted text;
+        this function does not write files or initialize standalone configuration.
+        There is no implicit external-editor fallback.
     """
     line_ending(initial_text)
     if not sys.stdin.isatty() or not sys.stdout.isatty():

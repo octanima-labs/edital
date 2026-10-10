@@ -1,5 +1,8 @@
 # Usage and integration
 
+Start with the [installation guide](installation.md) for pipx CLI installation,
+pip-based Python integration, upgrades, and terminal requirements.
+
 ## Standalone file editing
 
 ```bash
@@ -33,6 +36,10 @@ Force belongs only to purge, not list. `--no-prompt` concerns editor discard and
 does not bypass CLI purge confirmation.
 
 ### File-session lifecycle
+
+This example reads `existing.txt` if present and writes `notes.txt`, replacing
+its contents if it already exists. Run it in a working directory where that write
+is appropriate; the final `run()` needs an interactive terminal.
 
 ```python
 from edital import Edital
@@ -116,8 +123,10 @@ draft_color: "#FFA62B"
 conflict_color: "#E06C75"
 ```
 
-The first standalone use creates a missing configuration from packaged defaults
-and loads it. Invalid YAML/settings produce clear errors. `editor.conf.get(key,
+Constructing `Edital` or `EditalConf` creates a missing configuration from packaged
+defaults and loads it, including during headless use and cache maintenance.
+Importing the package and embedded editing do not initialize this file.
+Invalid YAML/settings produce clear errors. `editor.conf.get(key,
 default)` reads an effective value; `set(key, value)` validates and updates this
 instance only, not the configuration file. Changing an effective autosave interval
 reschedules the running timer. Settings edited on disk apply on the next launch.
@@ -436,6 +445,26 @@ before launch with a conversion diagnostic.
 Interactive terminal input and output are required. Redirected invocations fail
 clearly rather than launching an external editor. Imports are lazy, and terminal
 state is restored on acceptance, cancellation, or failure.
+
+## Troubleshooting
+
+| Symptom | What to do |
+| --- | --- |
+| `edital` is not found after pipx installation | Run `pipx ensurepath`, open a new terminal, and try `edital --help`. For a pip install, activate the environment where you installed it. |
+| Python cannot import `edital` | Install with `python -m pip install edital` using your application's interpreter. A pipx CLI environment is separate. |
+| The editor requires interactive terminal input and output | Run editing commands directly in a terminal without pipes or redirection. For automation, use headless `Edital` file operations; there is no external-editor fallback. |
+| Mixed or bare-CR line endings are rejected | Convert the document to uniform LF or CRLF using your existing tooling, then reopen it. Edital does not normalize it silently. |
+| Save fails or an unnamed draft needs a destination | In the TUI, correct the path in Save As and retry. Headlessly, pass `path=` to `save`. Ensure the parent directory exists, the destination is writable, and it is not open in another document. |
+| Saving is blocked by a recovery conflict | Choose a recovery action in the TUI, or inspect `document.conflict` and call `resolve_recovery` headlessly. Restoring cached text does not itself write the destination. |
+| Headless close or exit raises `ConfirmationRequired` | Preserve work with `cache=True`, or explicitly set `prompt=False` when discard is intended. Headless calls do not open confirmation dialogs. |
+| User configuration is invalid | Correct the YAML or setting identified in the error. Colors need quoted `"#RRGGBB"` strings; autosave needs a nonnegative integer. Invalid user settings must be corrected even if a constructor override would replace them. |
+| Cache purge fails without a terminal | Inspect snapshots with `edital cache list`; use `edital cache purge --force` only when you intend to remove all cached unsaved work. `--no-prompt` does not bypass purge confirmation. |
+| A recovery entry is reported invalid | The error identifies its snapshot path. Preserve a copy before repairing or removing that entry; destination files are separate from snapshots. |
+
+Saving and Save All are not whole-session transactions: earlier successful writes
+remain committed if a later write fails. Autosave writes are also permanent;
+discarding or cancelling does not roll them back. Recovery snapshots cover orderly
+exit rather than crashes, so explicitly save important work during editing.
 
 ## Confease integration
 

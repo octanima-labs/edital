@@ -23,6 +23,15 @@ class EditalConf:
     ``auto_restore`` is a boolean evaluated at editing launch, independently of
     exit caching. Packaged ``defaults.yml`` initializes the user ``conf.yml``.
     Invalid settings raise ``ValueError``; filesystem failures raise ``OSError``.
+
+    Args:
+        **overrides: Validated settings that take precedence over user YAML.
+            See :class:`edital.Edital` for supported names and value types.
+
+    Notes:
+        Construction creates the configuration parent directory and initializes
+        a missing file, including for headless callers. Existing files are not
+        rewritten to fill in omitted defaults.
     """
 
     def __init__(self, **overrides: Any) -> None:
@@ -56,7 +65,19 @@ class EditalConf:
         return self._values.get(key, default)
 
     def set(self, key: str, value: Any) -> None:
-        """Validate and update an instance setting without rewriting user YAML."""
+        """Validate and update an instance setting without rewriting user YAML.
+
+        Args:
+            key: Supported configuration name.
+            value: Value matching that setting's type and constraints.
+
+        Raises:
+            ValueError: If the key or value is invalid; the previous value remains.
+
+        Notes:
+            After validation, listeners run synchronously, even for an unchanged
+            value. Listener exceptions propagate after the setting is updated.
+        """
         if key == "auto_save":
             if type(value) is not int or value < 0:
                 raise ValueError("auto_save must be a nonnegative integer in milliseconds")
@@ -77,6 +98,15 @@ class EditalConf:
             listener(key)
 
     def subscribe(self, listener: Callable[[str], None]) -> Callable[[], None]:
-        """Subscribe to instance changes; return an unsubscribe function."""
+        """Subscribe to synchronous notifications after a setting changes.
+
+        Args:
+            listener: Callback receiving the name of each setting passed to
+                ``set``. Read the new value with ``get``.
+
+        Returns:
+            A zero-argument function removing this subscription. Call it once;
+            repeated removal raises ``ValueError``.
+        """
         self._listeners.append(listener)
         return lambda: self._listeners.remove(listener)
