@@ -1,5 +1,6 @@
 """Textual implementation of Edital's standalone text-session contract."""
 
+from threading import Event
 from typing import ClassVar
 
 from textual import events
@@ -78,13 +79,16 @@ class EditorApp(App[EditResult]):
     BINDINGS: ClassVar[list[BindingType]] = bindings("embedded")
 
     def __init__(self, initial_text: str = "", *, title: str = "Text editor",
-                 validator: Validator | None = None) -> None:
+                 validator: Validator | None = None,
+                 cancel_event: Event | None = None) -> None:
         super().__init__()
         self.title = title
         self.initial_text = initial_text
         self.newline = line_ending(initial_text)
         self.validator = validator
         self.failure: Exception | None = None
+        self.cancel_event = cancel_event
+        self._finished = False
 
     def compose(self) -> ComposeResult:
         yield Static(self.title, id="title", markup=False)
@@ -95,7 +99,23 @@ class EditorApp(App[EditResult]):
         yield Footer()
 
     def on_mount(self) -> None:
+        if self._check_cancelled():
+            return
+        if self.cancel_event is not None:
+            self.set_interval(0.05, self._check_cancelled)
         self.query_one(TextArea).focus()
+
+    def _finish(self, result: EditResult) -> None:
+        """Finalize once on the UI thread, including delayed dialog callbacks."""
+        if not self._finished:
+            self._finished = True
+            self.exit(result)
+
+    def _check_cancelled(self) -> bool:
+        """Observe the caller's event without invoking interactive quit rules."""
+        if self.cancel_event is not None and self.cancel_event.is_set():
+            self._finish(EditResult("cancelled"))
+        return self._finished
 
     @property
     def candidate(self) -> str:
@@ -103,6 +123,8 @@ class EditorApp(App[EditResult]):
         return self.query_one(TextArea).text.replace("\r\n", "\n").replace("\n", self.newline)
 
     def action_accept(self) -> None:
+        if self._check_cancelled():
+            return
         if isinstance(self.screen, ModalScreen):
             return
         candidate = self.candidate
@@ -110,13 +132,15 @@ class EditorApp(App[EditResult]):
             diagnostic = self.validator(candidate) if self.validator else None
         except Exception as error:  # noqa: BLE001 - propagate caller failures after App.run restores the terminal
             self.failure = error
-            self.exit(EditResult("cancelled"))
+            self._finish(EditResult("cancelled"))
+            return
+        if self._check_cancelled():
             return
         if diagnostic is not None:
             self.query_one("#diagnostic", Static).update(diagnostic)
             self.query_one(TextArea).focus()
             return
-        self.exit(EditResult("accepted", candidate))
+        self._finish(EditResult("accepted", candidate))
 
     def action_cancel(self) -> None:
         if isinstance(self.screen, HelpDialog):
@@ -131,14 +155,18 @@ class EditorApp(App[EditResult]):
 
     async def action_quit(self) -> None:
         """Explicitly cancel, retaining transactional discard confirmation."""
+        if self._finished:
+            return
         if isinstance(self.screen, ModalScreen):
             return
         if self.candidate != self.initial_text:
             origin = self.focused
 
             def discard_answer(discard: bool | None) -> None:
+                if self._finished:
+                    return
                 if discard:
-                    self.exit(EditResult("cancelled"))
+                    self._finish(EditResult("cancelled"))
                 elif origin is not None and origin.is_mounted:
                     origin.focus()
                 else:
@@ -146,7 +174,7 @@ class EditorApp(App[EditResult]):
 
             self.push_screen(DiscardDialog(), discard_answer)
         else:
-            self.exit(EditResult("cancelled"))
+            self._finish(EditResult("cancelled"))
 
     def action_find(self) -> None:
         if isinstance(self.screen, ModalScreen):

@@ -329,6 +329,63 @@ For application integrations, `TuiEditor().edit(...)` has the same interface as
 `edit_text(...)`. The public types and functions are exported by `edital`:
 `EditResult`, `TuiEditor`, `Validator`, and `edit_text`.
 
+## Cancel an embedded session programmatically
+
+Pass a caller-owned `threading.Event` as `cancel_event` to either `edit_text()`
+or `TuiEditor().edit()`. Another thread can call `cancel_event.set()` when the
+interaction is no longer needed. **External cancellation discards the draft
+without confirmation**, even with help, Find/Replace, or discard confirmation
+open. It returns `EditResult("cancelled")` with no text, performs no validation
+or persistence, and restores the terminal before returning.
+
+For example, a helper can watch a dedicated, connected socket for owner loss.
+This function owns the socket and closes it after editing ends:
+
+```python
+import socket
+from contextlib import suppress
+from threading import Event, Thread
+
+from edital import EditResult, edit_text
+
+
+def edit_while_connected(connection: socket.socket, initial_text: str) -> EditResult:
+    cancel_event = Event()
+
+    def watch_connection() -> None:
+        try:
+            while connection.recv(4096):
+                pass
+        except OSError:
+            pass
+        finally:
+            cancel_event.set()
+
+    watcher = Thread(target=watch_connection)
+    watcher.start()
+    try:
+        return edit_text(initial_text, cancel_event=cancel_event)
+    finally:
+        # Unblock and join the watcher on normal editor completion too.
+        with suppress(OSError):
+            connection.shutdown(socket.SHUT_RDWR)
+        watcher.join()
+        connection.close()
+```
+
+Use a separate event for each session. Edital reads the event but never clears
+it. If it is already set, valid initial text returns cancellation without
+importing the UI or requiring an interactive terminal. Invalid line endings
+still raise their normal validation error first.
+
+Cancellation is cooperative and observed on the UI thread. A running synchronous
+validator must finish before cancellation can be handled; cancellation is checked
+again after it returns normally. Unexpected validator exceptions still propagate
+after terminal cleanup. A result is finalized once: cancellation observed before
+acceptance wins, but cancellation arriving after acceptance is finalized cannot
+replace it. Integrations must independently reject late answers if their own
+request has already been aborted.
+
 ## Supply validation
 
 ```python

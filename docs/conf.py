@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "src"))
 project = "edital"
 author = "octanima-labs"
 copyright = "2026, octanima-labs"
-release = "0.2.0"
+release = "0.3.0"
 extensions = ["myst_parser", "sphinx.ext.autodoc", "sphinx.ext.napoleon", "sphinx_autodoc_typehints"]
 source_suffix = {".md": "markdown", ".rst": "restructuredtext"}
 root_doc = "index"

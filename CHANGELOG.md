@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-21
+
+### Added
+
+- Caller-controlled cancellation for `edit_text()` and `TuiEditor.edit()` through
+  an optional `cancel_event`. Integrations can signal the event from another
+  thread to discard the draft without confirmation, including during help,
+  search, or discard dialogs, and return cancellation after terminal cleanup.
+  Pre-cancelled calls validate initial text without opening the UI or requiring
+  interactive terminals; finalized outcomes remain stable under late cancellation.
+- Embedded cancellation documentation with a socket-watcher integration example
+  and guidance on cooperative validation and acceptance races.
+
+### Changed
+
+- Improved API docstrings with previously missing return-type information.
+
 ## [0.2.0] - 2026-10-10
 
 ### Breaking Changes

@@ -10,7 +10,7 @@ import pytest
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Native Linux PTY verification")
 @pytest.mark.parametrize("scenario", ["save", "failures", "controls", "dialogs", "recovery",
-                                     "picker", "picker-narrow", "embedded-quit"])
+                                     "picker", "picker-narrow", "embedded-quit", "embedded-external"])
 def test_real_terminal(tmp_path, scenario):
     import fcntl
     import pty
@@ -33,6 +33,7 @@ def test_real_terminal(tmp_path, scenario):
         "from pathlib import Path; "
         f"editor=Edital(); editor.open({str(first)!r}, {str(second)!r}); "
     )
+    cancel_fds = ()
     if scenario == "failures":
         source += (
             f"editor.session.active.path=Path({str(tmp_path / 'missing/file')!r}); "
@@ -90,6 +91,20 @@ def test_real_terminal(tmp_path, scenario):
         )
         actions = [(b"\x1bOP", 0.3), (b"\x1b", 0.3), (b"\t\t", 0.3),
                    (b"\x1b", 0.3), (b"\x11", 0.4)]
+    elif scenario == "embedded-external":
+        cancel_read, cancel_write = os.pipe()
+        cancel_fds = (cancel_read,)
+        source = (
+            "import os, sys, termios; from threading import Event, Thread; "
+            "from edital import EditResult, edit_text; "
+            "before=termios.tcgetattr(sys.stdin); event=Event(); "
+            f"watcher=Thread(target=lambda: (os.read({cancel_read}, 1), event.set())); "
+            "watcher.start(); result=edit_text('seed', cancel_event=event); watcher.join(); "
+            "print('TERMINAL_DONE', result==EditResult('cancelled') "
+            "and termios.tcgetattr(sys.stdin)==before)"
+        )
+        # Dirty buffer and open confirmation must not prevent external shutdown.
+        actions = [(b"x", 0.2), (b"\x11", 0.3), (None, 0.3)]
     elif scenario == "embedded-quit":
         source = (
             "from edital.app import EditorApp; "
@@ -103,7 +118,7 @@ def test_real_terminal(tmp_path, scenario):
         # Ctrl+PageUp selects first; F2 saves/closes it; F3 saves remaining and exits.
         actions = [(b"\x1b[5;5~", 0.2), (b"x", 0.2), (b"\x1bOQ", 0.3), (b"\x1bOR", 0.3)]
     process = subprocess.Popen([sys.executable, "-c", source], stdin=slave, stdout=slave,
-                               stderr=slave, env=environment)
+                               stderr=slave, env=environment, pass_fds=cancel_fds)
     transcript = bytearray()
 
     def drain(duration):
@@ -124,6 +139,8 @@ def test_real_terminal(tmp_path, scenario):
         for keys, duration in actions:
             if keys is not None:
                 os.write(master, keys)
+            elif scenario == "embedded-external":
+                os.write(cancel_write, b"x")
             drain(duration)
         deadline = time.monotonic() + 8
         while process.poll() is None and time.monotonic() < deadline:
@@ -157,7 +174,7 @@ def test_real_terminal(tmp_path, scenario):
             assert not first.exists()
             assert b"Destination is missing" in transcript
             assert list((tmp_path / "state/edital/recovery").glob("*.json"))
-        elif scenario == "embedded-quit":
+        elif scenario in ("embedded-quit", "embedded-external"):
             assert b"Discard" in transcript
             assert first.read_text() == "first" and second.read_text() == "second"
             assert not (tmp_path / "config").exists() and not (tmp_path / "state").exists()
@@ -167,3 +184,6 @@ def test_real_terminal(tmp_path, scenario):
             process.wait()
         os.close(master)
         os.close(slave)
+        if scenario == "embedded-external":
+            os.close(cancel_read)
+            os.close(cancel_write)
